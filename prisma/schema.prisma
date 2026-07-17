@@ -1,0 +1,322 @@
+// Teeway CRM — database schema
+// See plan: C:\Users\anton\.claude\plans\stateless-jumping-nova.md
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Users & auth ----------
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(STAFF)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedClients     Client[]
+  clientActivities ClientActivity[]
+  createdQuotes    Quote[]
+  issuedInvoices   Invoice[]
+  settingsUpdates  Settings[]
+}
+
+// ---------- Clients / pipeline ----------
+
+enum PipelineStage {
+  LEAD
+  CONTACTED
+  BUDGET_SENT
+  WON
+  LOST
+}
+
+model Client {
+  id                  String        @id @default(cuid())
+  companyName         String
+  contactName         String?
+  nif                 String?
+  email               String?
+  phone               String?
+  addressLine         String?
+  postalCode          String?
+  city                String?
+  country             String        @default("PT")
+  pipelineStage       PipelineStage @default(LEAD)
+  toconlineCustomerId String?
+  ownerUserId         String?
+  owner               User?         @relation(fields: [ownerUserId], references: [id])
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  activities ClientActivity[]
+  quotes     Quote[]
+  invoices   Invoice[]
+}
+
+enum ActivityType {
+  NOTE
+  STAGE_CHANGE
+  CALL
+  EMAIL
+  REMINDER
+  SYSTEM
+}
+
+model ClientActivity {
+  id            String       @id @default(cuid())
+  clientId      String
+  client        Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorUserId  String?
+  author        User?        @relation(fields: [authorUserId], references: [id])
+  type          ActivityType
+  body          String?
+  reminderDueAt DateTime?
+  reminderDone  Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+}
+
+// ---------- Cart catalog ----------
+
+model CartModel {
+  id                       String   @id @default(cuid())
+  code                     String   @unique
+  name                     String
+  seats                    Int?
+  defaultDescription       String?
+  defaultGoodsCostOriginal Decimal  @db.Decimal(12, 2)
+  defaultCurrency          String   @default("EUR")
+  isActive                 Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  orderCartItems OrderCartItem[]
+  quoteLines     QuoteLine[]
+}
+
+// ---------- Orders (producer purchase batches) ----------
+
+enum OrderStatus {
+  PLANNED
+  IN_TRANSIT
+  CLEARED
+  RECEIVED
+}
+
+enum DiscountType {
+  NONE
+  FLAT
+  PERCENT
+}
+
+model Order {
+  id                 String       @id @default(cuid())
+  reference          String       @unique
+  supplierName       String?
+  orderDate          DateTime
+  originalCurrency   String       @default("EUR")
+  totalCostOriginal  Decimal      @db.Decimal(12, 2)
+  exchangeRateToEUR  Decimal      @default(1) @db.Decimal(12, 6)
+  discountType       DiscountType @default(NONE)
+  discountValue      Decimal      @default(0) @db.Decimal(12, 2)
+  customsDutyPercent Decimal?     @db.Decimal(6, 3)
+  flatClearanceFee   Decimal?     @db.Decimal(12, 2)
+  status             OrderStatus  @default(PLANNED)
+  notes              String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  items      OrderCartItem[]
+  quoteLines QuoteLine[]
+}
+
+model OrderCartItem {
+  id                    String    @id @default(cuid())
+  orderId               String
+  order                 Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  cartModelId           String
+  cartModel             CartModel @relation(fields: [cartModelId], references: [id])
+  quantity              Int       @default(1)
+  unitGoodsCostOriginal Decimal   @db.Decimal(12, 2)
+  createdAt             DateTime  @default(now())
+
+  quoteLines QuoteLine[]
+}
+
+// ---------- Quotes (orçamentos) ----------
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model Quote {
+  id                 String      @id @default(cuid())
+  quoteNumber        String      @unique
+  clientId           String
+  client             Client      @relation(fields: [clientId], references: [id])
+  status             QuoteStatus @default(DRAFT)
+  issueDate          DateTime    @default(now())
+  validUntil         DateTime?
+  deliveryTerms      String?
+  paymentTerms       String?
+  notes              String?
+  subtotalExVat      Decimal     @default(0) @db.Decimal(12, 2)
+  vatAmount          Decimal     @default(0) @db.Decimal(12, 2)
+  totalIncVat        Decimal     @default(0) @db.Decimal(12, 2)
+  createdByUserId    String?
+  createdBy          User?       @relation(fields: [createdByUserId], references: [id])
+  pdfBlobUrl         String?
+  // Reserved for a future shareable-link / online-accept flow (not built in v1).
+  publicShareToken   String?     @unique
+  publicShareEnabled Boolean     @default(false)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  lines    QuoteLine[]
+  invoices Invoice[]
+}
+
+model QuoteLine {
+  id               String         @id @default(cuid())
+  quoteId          String
+  quote            Quote          @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  position         Int            @default(0)
+  cartModelId      String?
+  cartModel        CartModel?     @relation(fields: [cartModelId], references: [id])
+  orderId          String?
+  order            Order?         @relation(fields: [orderId], references: [id])
+  orderCartItemId  String?
+  orderCartItem    OrderCartItem? @relation(fields: [orderCartItemId], references: [id])
+  name             String
+  specText         String?
+  quantity         Int            @default(1)
+
+  // Pricing chain, frozen at the moment the line is added/recalculated —
+  // never silently drifts if Settings or the linked Order changes later.
+  unitLandedCostEUR          Decimal @db.Decimal(12, 2)
+  customsDutyPercentSnapshot Decimal @db.Decimal(6, 3)
+  clearanceFeeSnapshot       Decimal @db.Decimal(12, 2)
+  markupPercentSnapshot      Decimal @db.Decimal(6, 3)
+  vatRateSnapshot            Decimal @db.Decimal(6, 3)
+  unitSellPriceExVat         Decimal @db.Decimal(12, 2)
+  unitSellPriceIncVat        Decimal @db.Decimal(12, 2)
+  lineTotalExVat             Decimal @db.Decimal(12, 2)
+  lineTotalIncVat            Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- Invoices (faturas) ----------
+
+enum InvoiceStatus {
+  PENDING_REVIEW
+  READY_TO_ISSUE
+  ISSUED
+  ERROR
+}
+
+enum ToconlineDocType {
+  FT
+  FS
+  FR
+}
+
+model Invoice {
+  id           String        @id @default(cuid())
+  internalRef  String        @unique
+  quoteId      String?
+  quote        Quote?        @relation(fields: [quoteId], references: [id])
+  clientId     String
+  client       Client        @relation(fields: [clientId], references: [id])
+  status       InvoiceStatus @default(PENDING_REVIEW)
+  issueDate    DateTime?
+  dueDate      DateTime?
+  paymentTerms String?
+
+  subtotalExVat Decimal @default(0) @db.Decimal(12, 2)
+  vatAmount     Decimal @default(0) @db.Decimal(12, 2)
+  totalIncVat   Decimal @default(0) @db.Decimal(12, 2)
+
+  // Populated once issued via TOConline — see Milestone 5/7. Source of fiscal truth.
+  toconlineDocumentId     String?
+  toconlineDocumentType   ToconlineDocType?
+  toconlineOfficialNumber String?
+  toconlineAtcud          String?
+  toconlineQrCodeData     String?
+  toconlinePdfUrl         String?
+  lastSyncError           String?
+
+  issuedAt       DateTime?
+  issuedByUserId String?
+  issuedBy       User?     @relation(fields: [issuedByUserId], references: [id])
+  pdfBlobUrl     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines InvoiceLine[]
+}
+
+model InvoiceLine {
+  id                  String   @id @default(cuid())
+  invoiceId           String
+  invoice             Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position            Int      @default(0)
+  name                String
+  specText            String?
+  quantity            Int      @default(1)
+  unitSellPriceExVat  Decimal  @db.Decimal(12, 2)
+  unitSellPriceIncVat Decimal  @db.Decimal(12, 2)
+  vatRate             Decimal  @db.Decimal(6, 3)
+  lineTotalExVat      Decimal  @db.Decimal(12, 2)
+  lineTotalIncVat     Decimal  @db.Decimal(12, 2)
+  createdAt           DateTime @default(now())
+}
+
+// ---------- Settings & TOConline connection (singletons, id fixed to 1) ----------
+
+model Settings {
+  id                        Int      @id @default(1)
+  defaultCustomsDutyPercent Decimal  @default(12.3) @db.Decimal(6, 3)
+  defaultClearanceFee       Decimal  @default(150) @db.Decimal(12, 2)
+  defaultMarkupPercent      Decimal  @default(100) @db.Decimal(6, 3)
+  vatRate                   Decimal  @default(23) @db.Decimal(6, 3)
+  updatedByUserId           String?
+  updatedBy                 User?    @relation(fields: [updatedByUserId], references: [id])
+  updatedAt                 DateTime @updatedAt
+}
+
+enum ToconlineEnvironment {
+  SANDBOX
+  PRODUCTION
+}
+
+model ToconlineConnection {
+  id           Int                  @id @default(1)
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  scope        String?
+  environment  ToconlineEnvironment @default(SANDBOX)
+  obtainedAt   DateTime?
+  updatedAt    DateTime             @updatedAt
+}
