@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSettings } from "@/lib/settings";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -10,71 +11,65 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AddQuoteLineForm } from "@/components/quotes/add-quote-line-form";
-import { RemoveQuoteLineButton } from "@/components/quotes/remove-quote-line-button";
-import { RecalculateQuoteLineButton } from "@/components/quotes/recalculate-quote-line-button";
-import { QuoteStatusSelect } from "@/components/quotes/quote-status-select";
-import { CreateInvoiceButton } from "@/components/quotes/create-invoice-button";
+import { AddInvoiceLineForm } from "@/components/invoices/add-invoice-line-form";
+import { RemoveInvoiceLineButton } from "@/components/invoices/remove-invoice-line-button";
+import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
 import { formatDatePT, formatEUR } from "@/lib/format";
 
-export default async function QuoteDetailPage({
+export default async function InvoiceDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
 
-  const [quote, orders] = await Promise.all([
-    prisma.quote.findUnique({
+  const [invoice, settings] = await Promise.all([
+    prisma.invoice.findUnique({
       where: { id },
       include: {
         client: true,
+        quote: { select: { id: true, quoteNumber: true } },
         lines: { orderBy: { position: "asc" } },
       },
     }),
-    prisma.order.findMany({
-      orderBy: { orderDate: "desc" },
-      include: { items: { include: { cartModel: true }, orderBy: { createdAt: "asc" } } },
-    }),
+    getSettings(),
   ]);
 
-  if (!quote) notFound();
-
-  const orderItems = orders.flatMap((order) =>
-    order.items.map((item) => ({
-      id: item.id,
-      orderReference: order.reference,
-      cartModelCode: item.cartModel.code,
-      cartModelName: item.cartModel.name,
-    })),
-  );
+  if (!invoice) notFound();
 
   return (
     <div>
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">
-            {quote.quoteNumber}
+            {invoice.internalRef}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {quote.client.companyName}
+            {invoice.client.companyName}
+            {invoice.quote && (
+              <>
+                {" · a partir do orçamento "}
+                <Link href={`/quotes/${invoice.quote.id}`} className="underline">
+                  {invoice.quote.quoteNumber}
+                </Link>
+              </>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             nativeButton={false}
-            render={<Link href={`/quotes/${quote.id}/edit`} />}
+            render={<Link href={`/invoices/${invoice.id}/edit`} />}
           >
             Editar
           </Button>
           <Button
             nativeButton={false}
-            render={<Link href={`/quotes/${quote.id}/pdf`} target="_blank" />}
+            render={<Link href={`/invoices/${invoice.id}/pdf`} target="_blank" />}
           >
             Ver / Exportar PDF
           </Button>
-          {quote.lines.length > 0 && <CreateInvoiceButton quoteId={quote.id} />}
         </div>
       </div>
 
@@ -82,32 +77,44 @@ export default async function QuoteDetailPage({
         <div>
           <div className="text-xs text-muted-foreground">Estado</div>
           <div className="mt-1.5">
-            <QuoteStatusSelect quoteId={quote.id} value={quote.status} />
+            <InvoiceStatusSelect invoiceId={invoice.id} value={invoice.status} />
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Data</div>
-          <div className="mt-1 text-foreground">{formatDatePT(quote.issueDate)}</div>
+          <div className="text-xs text-muted-foreground">Data de emissão</div>
+          <div className="mt-1 text-foreground">
+            {invoice.issueDate ? formatDatePT(invoice.issueDate) : "—"}
+          </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Válido até</div>
+          <div className="text-xs text-muted-foreground">Data de vencimento</div>
           <div className="mt-1 text-foreground">
-            {quote.validUntil ? formatDatePT(quote.validUntil) : "—"}
+            {invoice.dueDate ? formatDatePT(invoice.dueDate) : "—"}
           </div>
         </div>
       </div>
 
-      {quote.notes && (
+      {invoice.paymentTerms && (
         <p className="mt-4 max-w-xl text-sm text-muted-foreground">
-          {quote.notes}
+          {invoice.paymentTerms}
         </p>
       )}
 
+      <div className="mt-6 rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+        Fatura interna, ainda não emitida fiscalmente. A emissão através do
+        TOConline (número oficial, ATCUD, código QR) fica disponível numa
+        fase posterior do projeto — até lá, o PDF é apenas uma
+        pré-visualização.
+      </div>
+
       <h2 className="mt-10 text-sm font-medium text-foreground">
-        Linhas do orçamento
+        Linhas da fatura
       </h2>
       <div className="mt-3">
-        <AddQuoteLineForm quoteId={quote.id} orderItems={orderItems} />
+        <AddInvoiceLineForm
+          invoiceId={invoice.id}
+          defaultVatRate={settings.vatRate.toString()}
+        />
       </div>
 
       <div className="mt-6 rounded-lg border border-border">
@@ -117,23 +124,24 @@ export default async function QuoteDetailPage({
               <TableHead>Descrição</TableHead>
               <TableHead>Qtd</TableHead>
               <TableHead>Preço unit. s/IVA</TableHead>
+              <TableHead>IVA</TableHead>
               <TableHead>Total s/IVA</TableHead>
               <TableHead>Total c/IVA</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {quote.lines.length === 0 && (
+            {invoice.lines.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="py-8 text-center text-sm text-muted-foreground"
                 >
                   Sem linhas ainda.
                 </TableCell>
               </TableRow>
             )}
-            {quote.lines.map((line) => (
+            {invoice.lines.map((line) => (
               <TableRow key={line.id}>
                 <TableCell className="font-medium text-foreground">
                   {line.name}
@@ -149,6 +157,9 @@ export default async function QuoteDetailPage({
                 <TableCell className="text-muted-foreground">
                   {formatEUR(line.unitSellPriceExVat)}
                 </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {Number(line.vatRate)}%
+                </TableCell>
                 <TableCell className="text-foreground">
                   {formatEUR(line.lineTotalExVat)}
                 </TableCell>
@@ -156,15 +167,7 @@ export default async function QuoteDetailPage({
                   {formatEUR(line.lineTotalIncVat)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    {line.orderCartItemId && (
-                      <RecalculateQuoteLineButton
-                        lineId={line.id}
-                        quoteId={quote.id}
-                      />
-                    )}
-                    <RemoveQuoteLineButton lineId={line.id} quoteId={quote.id} />
-                  </div>
+                  <RemoveInvoiceLineButton lineId={line.id} invoiceId={invoice.id} />
                 </TableCell>
               </TableRow>
             ))}
@@ -172,20 +175,20 @@ export default async function QuoteDetailPage({
         </Table>
       </div>
 
-      {quote.lines.length > 0 && (
+      {invoice.lines.length > 0 && (
         <div className="mt-4 flex justify-end">
           <div className="w-72 text-sm">
             <div className="flex justify-between py-1 text-muted-foreground">
               <span>Subtotal s/IVA</span>
-              <span>{formatEUR(quote.subtotalExVat)}</span>
+              <span>{formatEUR(invoice.subtotalExVat)}</span>
             </div>
             <div className="flex justify-between py-1 text-muted-foreground">
               <span>IVA</span>
-              <span>{formatEUR(quote.vatAmount)}</span>
+              <span>{formatEUR(invoice.vatAmount)}</span>
             </div>
             <div className="mt-1 flex justify-between rounded-lg bg-foreground px-3 py-2 font-semibold text-background">
-              <span>Total c/IVA</span>
-              <span>{formatEUR(quote.totalIncVat)}</span>
+              <span>Total a pagar</span>
+              <span>{formatEUR(invoice.totalIncVat)}</span>
             </div>
           </div>
         </div>

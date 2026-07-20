@@ -9,6 +9,7 @@
   --line: #e5e5e2;
   --soft: #f6f6f4;
 
+  position: relative;
   width: 210mm;
   min-height: 297mm;
   margin: 24px auto;
@@ -243,6 +244,108 @@
   color: var(--faint);
   margin-top: 20px;
   line-height: 1.6;
+}
+
+/* ---- Fatura: resumo de IVA + totais lado a lado ---- */
+.lower {
+  display: flex;
+  gap: 26px;
+  margin-top: 24px;
+  align-items: flex-start;
+}
+.vat {
+  flex: 1;
+}
+.vat table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.vat th {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--faint);
+  text-align: right;
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.vat th:first-child {
+  text-align: left;
+}
+.vat td {
+  font-size: 11px;
+  padding: 7px 8px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.vat td:first-child {
+  text-align: left;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---- Fatura: pagamento + estado fiscal ---- */
+.strip {
+  display: flex;
+  gap: 26px;
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.pay {
+  flex: 1;
+}
+.pay .v {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.previewNotice {
+  width: 260px;
+  border: 1px dashed var(--faint);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.previewNotice .k {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.legalnote {
+  font-size: 9.5px;
+  color: var(--faint);
+  margin-top: 22px;
+  line-height: 1.7;
+}
+
+/* ---- Marca de água de pré-visualização (fatura ainda não emitida) ---- */
+.watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+.watermark span {
+  transform: rotate(-32deg);
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: rgba(22, 24, 28, 0.14);
+  white-space: nowrap;
+  text-transform: uppercase;
 }
 
 /* ---- Rodapé ---- */

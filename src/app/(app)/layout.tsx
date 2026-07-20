@@ -29,6 +29,7 @@ export default async function AppLayout({
             <NavLink href="/cart-models">Modelos</NavLink>
             <NavLink href="/orders">Encomendas</NavLink>
             <NavLink href="/quotes">Orçamentos</NavLink>
+            <NavLink href="/invoices">Faturas</NavLink>
             {isAdmin && <NavLink href="/settings">Configurações</NavLink>}
           </nav>
         </div>
