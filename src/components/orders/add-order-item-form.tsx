@@ -54,6 +54,7 @@ export function AddOrderItemForm({
           <SelectTrigger id="cartModelId" className="w-56">
             <SelectValue placeholder="Escolher modelo">
               {(value: string) => {
+                if (!value) return "Escolher modelo";
                 const model = cartModels.find((m) => m.id === value);
                 return model ? `${model.code} — ${model.name}` : value;
               }}
