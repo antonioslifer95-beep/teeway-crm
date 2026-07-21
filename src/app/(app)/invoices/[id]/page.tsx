@@ -14,6 +14,8 @@ import {
 import { AddInvoiceLineForm } from "@/components/invoices/add-invoice-line-form";
 import { RemoveInvoiceLineButton } from "@/components/invoices/remove-invoice-line-button";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
+import { PageHeader, SectionLabel } from "@/components/page-header";
+import { InvoiceStatusBadge } from "@/components/status-badge";
 import { formatDatePT, formatEUR } from "@/lib/format";
 
 export default async function InvoiceDetailPage({
@@ -39,12 +41,15 @@ export default async function InvoiceDetailPage({
 
   return (
     <div>
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">
+      <PageHeader
+        title={
+          <span className="flex items-center gap-3">
             {invoice.internalRef}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+            <InvoiceStatusBadge value={invoice.status} />
+          </span>
+        }
+        description={
+          <>
             <Link
               href={`/clients/${invoice.client.id}`}
               className="hover:text-foreground hover:underline"
@@ -59,62 +64,59 @@ export default async function InvoiceDetailPage({
                 </Link>
               </>
             )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={<Link href={`/invoices/${invoice.id}/edit`} />}
-          >
-            Editar
-          </Button>
-          <Button
-            nativeButton={false}
-            render={<Link href={`/invoices/${invoice.id}/pdf`} target="_blank" />}
-          >
-            Ver / Exportar PDF
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      >
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={<Link href={`/invoices/${invoice.id}/edit`} />}
+        >
+          Editar
+        </Button>
+        <Button
+          nativeButton={false}
+          render={<Link href={`/invoices/${invoice.id}/pdf`} target="_blank" />}
+        >
+          Ver / Exportar PDF
+        </Button>
+      </PageHeader>
 
-      <div className="mt-6 flex flex-wrap gap-x-10 gap-y-3 text-sm">
+      <div className="mt-6 flex flex-wrap gap-x-10 gap-y-4 text-sm">
         <div>
-          <div className="text-xs text-muted-foreground">Estado</div>
-          <div className="mt-1.5">
+          <SectionLabel>Estado</SectionLabel>
+          <div className="mt-2">
             <InvoiceStatusSelect invoiceId={invoice.id} value={invoice.status} />
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Data de emissão</div>
-          <div className="mt-1 text-foreground">
+          <SectionLabel>Data de emissão</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
             {invoice.issueDate ? formatDatePT(invoice.issueDate) : "—"}
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Data de vencimento</div>
-          <div className="mt-1 text-foreground">
+          <SectionLabel>Data de vencimento</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
             {invoice.dueDate ? formatDatePT(invoice.dueDate) : "—"}
           </div>
         </div>
       </div>
 
       {invoice.paymentTerms && (
-        <p className="mt-4 max-w-xl text-sm text-muted-foreground">
+        <p className="mt-6 max-w-xl text-sm text-muted-foreground">
           {invoice.paymentTerms}
         </p>
       )}
 
-      <div className="mt-6 rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+      <div className="mt-6 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground">
         Fatura interna, ainda não emitida fiscalmente. A emissão através do
         TOConline (número oficial, ATCUD, código QR) fica disponível numa
         fase posterior do projeto — até lá, o PDF é apenas uma
         pré-visualização.
       </div>
 
-      <h2 className="mt-10 text-sm font-medium text-foreground">
-        Linhas da fatura
-      </h2>
+      <SectionLabel className="mt-12">Linhas da fatura</SectionLabel>
       <div className="mt-3">
         <AddInvoiceLineForm
           invoiceId={invoice.id}
@@ -122,16 +124,16 @@ export default async function InvoiceDetailPage({
         />
       </div>
 
-      <div className="mt-6 rounded-lg border border-border">
+      <div className="mt-6 overflow-hidden rounded-xl border border-border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Descrição</TableHead>
-              <TableHead>Qtd</TableHead>
-              <TableHead>Preço unit. s/IVA</TableHead>
-              <TableHead>IVA</TableHead>
-              <TableHead>Total s/IVA</TableHead>
-              <TableHead>Total c/IVA</TableHead>
+              <TableHead className="text-right">Qtd</TableHead>
+              <TableHead className="text-right">Preço unit. s/IVA</TableHead>
+              <TableHead className="text-right">IVA</TableHead>
+              <TableHead className="text-right">Total s/IVA</TableHead>
+              <TableHead className="text-right">Total c/IVA</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -140,7 +142,7 @@ export default async function InvoiceDetailPage({
               <TableRow>
                 <TableCell
                   colSpan={7}
-                  className="py-8 text-center text-sm text-muted-foreground"
+                  className="py-10 text-center text-sm text-muted-foreground"
                 >
                   Sem linhas ainda.
                 </TableCell>
@@ -151,24 +153,24 @@ export default async function InvoiceDetailPage({
                 <TableCell className="font-medium text-foreground">
                   {line.name}
                   {line.specText && (
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs font-normal text-muted-foreground">
                       {line.specText}
                     </div>
                   )}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {line.quantity}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {formatEUR(line.unitSellPriceExVat)}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {Number(line.vatRate)}%
                 </TableCell>
-                <TableCell className="text-foreground">
+                <TableCell className="text-right text-foreground tabular-nums">
                   {formatEUR(line.lineTotalExVat)}
                 </TableCell>
-                <TableCell className="font-medium text-foreground">
+                <TableCell className="text-right font-medium text-foreground tabular-nums">
                   {formatEUR(line.lineTotalIncVat)}
                 </TableCell>
                 <TableCell className="text-right">
@@ -181,19 +183,27 @@ export default async function InvoiceDetailPage({
       </div>
 
       {invoice.lines.length > 0 && (
-        <div className="mt-4 flex justify-end">
+        <div className="mt-5 flex justify-end">
           <div className="w-72 text-sm">
             <div className="flex justify-between py-1 text-muted-foreground">
               <span>Subtotal s/IVA</span>
-              <span>{formatEUR(invoice.subtotalExVat)}</span>
+              <span className="tabular-nums">
+                {formatEUR(invoice.subtotalExVat)}
+              </span>
             </div>
             <div className="flex justify-between py-1 text-muted-foreground">
               <span>IVA</span>
-              <span>{formatEUR(invoice.vatAmount)}</span>
+              <span className="tabular-nums">
+                {formatEUR(invoice.vatAmount)}
+              </span>
             </div>
-            <div className="mt-1 flex justify-between rounded-lg bg-foreground px-3 py-2 font-semibold text-background">
-              <span>Total a pagar</span>
-              <span>{formatEUR(invoice.totalIncVat)}</span>
+            <div className="mt-2 flex items-center justify-between rounded-xl bg-foreground px-4 py-3 font-semibold text-background">
+              <span className="text-xs uppercase tracking-wider text-background/70">
+                Total a pagar
+              </span>
+              <span className="text-lg tabular-nums">
+                {formatEUR(invoice.totalIncVat)}
+              </span>
             </div>
           </div>
         </div>

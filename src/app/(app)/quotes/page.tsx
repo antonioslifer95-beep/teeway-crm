@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
+import { QuoteStatusBadge } from "@/components/status-badge";
 import {
   Table,
   TableBody,
@@ -10,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { QUOTE_STATUS_LABELS } from "@/lib/quote-labels";
 import { formatDatePT, formatEUR } from "@/lib/format";
 
 export default async function QuotesPage() {
@@ -21,21 +21,23 @@ export default async function QuotesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Orçamentos</h1>
+      <PageHeader
+        title="Orçamentos"
+        description="Propostas de preço enviadas aos clientes."
+      >
         <Button nativeButton={false} render={<Link href="/quotes/new" />}>
           Novo orçamento
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="mt-6 rounded-lg border border-border">
+      <div className="mt-6 overflow-hidden rounded-xl border border-border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>N.º</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Data</TableHead>
-              <TableHead>Total c/IVA</TableHead>
+              <TableHead className="text-right">Total c/IVA</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
@@ -44,7 +46,7 @@ export default async function QuotesPage() {
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="py-8 text-center text-sm text-muted-foreground"
+                  className="py-10 text-center text-sm text-muted-foreground"
                 >
                   Sem orçamentos ainda.
                 </TableCell>
@@ -60,16 +62,14 @@ export default async function QuotesPage() {
                 <TableCell className="text-muted-foreground">
                   {quote.client.companyName}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-muted-foreground tabular-nums">
                   {formatDatePT(quote.issueDate)}
                 </TableCell>
-                <TableCell className="text-foreground">
+                <TableCell className="text-right font-medium text-foreground tabular-nums">
                   {formatEUR(quote.totalIncVat)}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">
-                    {QUOTE_STATUS_LABELS[quote.status]}
-                  </Badge>
+                  <QuoteStatusBadge value={quote.status} />
                 </TableCell>
               </TableRow>
             ))}

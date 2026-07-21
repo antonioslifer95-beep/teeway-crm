@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-guard";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Table,
   TableBody,
@@ -19,14 +20,14 @@ export default async function UsersSettingsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">
-          Utilizadores
-        </h1>
+      <PageHeader
+        title="Utilizadores"
+        description="Contas de acesso à plataforma."
+      >
         <NewUserDialog />
-      </div>
+      </PageHeader>
 
-      <div className="mt-6 rounded-lg border border-border">
+      <div className="mt-6 overflow-hidden rounded-xl border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -47,16 +48,12 @@ export default async function UsersSettingsPage() {
                   {user.email}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{user.role}</Badge>
+                  <StatusBadge tone="outline">{user.role}</StatusBadge>
                 </TableCell>
                 <TableCell>
-                  {user.isActive ? (
-                    <Badge variant="outline">Ativo</Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-muted-foreground">
-                      Inativo
-                    </Badge>
-                  )}
+                  <StatusBadge tone={user.isActive ? "solid" : "muted"}>
+                    {user.isActive ? "Ativo" : "Inativo"}
+                  </StatusBadge>
                 </TableCell>
                 <TableCell className="text-right">
                   <ToggleUserActiveButton

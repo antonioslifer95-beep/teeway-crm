@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
+import { OrderStatusBadge } from "@/components/status-badge";
 import {
   Table,
   TableBody,
@@ -10,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ORDER_STATUS_LABELS } from "@/lib/order-labels";
 import { formatDatePT } from "@/lib/format";
 
 export default async function OrdersPage() {
@@ -21,21 +21,23 @@ export default async function OrdersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Encomendas</h1>
+      <PageHeader
+        title="Encomendas"
+        description="Lotes de compra ao produtor — base do custo de importação."
+      >
         <Button nativeButton={false} render={<Link href="/orders/new" />}>
           Nova encomenda
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="mt-6 rounded-lg border border-border">
+      <div className="mt-6 overflow-hidden rounded-xl border border-border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Referência</TableHead>
               <TableHead>Fornecedor</TableHead>
               <TableHead>Data</TableHead>
-              <TableHead>Itens</TableHead>
+              <TableHead className="text-right">Itens</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
@@ -60,16 +62,14 @@ export default async function OrdersPage() {
                 <TableCell className="text-muted-foreground">
                   {order.supplierName || "—"}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-muted-foreground tabular-nums">
                   {formatDatePT(order.orderDate)}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {order._count.items}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">
-                    {ORDER_STATUS_LABELS[order.status]}
-                  </Badge>
+                  <OrderStatusBadge value={order.status} />
                 </TableCell>
               </TableRow>
             ))}

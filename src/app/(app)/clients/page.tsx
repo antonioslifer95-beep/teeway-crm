@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
+import { PipelineBadge } from "@/components/status-badge";
 import {
   Table,
   TableBody,
@@ -32,14 +33,16 @@ export default async function ClientsPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Clientes</h1>
+      <PageHeader
+        title="Clientes"
+        description="Pipeline comercial — do primeiro contacto ao negócio fechado."
+      >
         <Button nativeButton={false} render={<Link href="/clients/new" />}>
           Novo cliente
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-6 flex flex-wrap gap-2">
         <Link
           href="/clients"
           className={cn(
@@ -67,7 +70,7 @@ export default async function ClientsPage({
         ))}
       </div>
 
-      <div className="mt-6 rounded-lg border border-border">
+      <div className="mt-6 overflow-hidden rounded-xl border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -82,7 +85,7 @@ export default async function ClientsPage({
               <TableRow>
                 <TableCell
                   colSpan={4}
-                  className="py-8 text-center text-sm text-muted-foreground"
+                  className="py-10 text-center text-sm text-muted-foreground"
                 >
                   Sem clientes{activeStage ? " nesta fase" : ""}.
                 </TableCell>
@@ -105,9 +108,7 @@ export default async function ClientsPage({
                   {client.city || "—"}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">
-                    {PIPELINE_STAGE_LABELS[client.pipelineStage]}
-                  </Badge>
+                  <PipelineBadge value={client.pipelineStage} />
                 </TableCell>
               </TableRow>
             ))}

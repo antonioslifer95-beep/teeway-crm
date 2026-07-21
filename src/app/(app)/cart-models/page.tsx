@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Table,
   TableBody,
@@ -20,23 +21,23 @@ export default async function CartModelsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">
-          Modelos de carrinho
-        </h1>
+      <PageHeader
+        title="Modelos de carrinho"
+        description="Catálogo reutilizável de carrinhos, com custo de referência."
+      >
         <Button nativeButton={false} render={<Link href="/cart-models/new" />}>
           Novo modelo
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="mt-6 rounded-lg border border-border">
+      <div className="mt-6 overflow-hidden rounded-xl border border-border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Código</TableHead>
               <TableHead>Nome</TableHead>
-              <TableHead>Lugares</TableHead>
-              <TableHead>Custo de referência</TableHead>
+              <TableHead className="text-right">Lugares</TableHead>
+              <TableHead className="text-right">Custo de referência</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead />
             </TableRow>
@@ -62,21 +63,17 @@ export default async function CartModelsPage() {
                 <TableCell className="text-muted-foreground">
                   {model.name}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {model.seats ?? "—"}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {formatEUR(model.defaultGoodsCostOriginal)}{" "}
                   {model.defaultCurrency !== "EUR" ? model.defaultCurrency : ""}
                 </TableCell>
                 <TableCell>
-                  {model.isActive ? (
-                    <Badge variant="outline">Ativo</Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-muted-foreground">
-                      Inativo
-                    </Badge>
-                  )}
+                  <StatusBadge tone={model.isActive ? "solid" : "muted"}>
+                    {model.isActive ? "Ativo" : "Inativo"}
+                  </StatusBadge>
                 </TableCell>
                 <TableCell className="text-right">
                   <ToggleCartModelActiveButton

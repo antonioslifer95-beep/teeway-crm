@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { calculateLandedCostsForOrder, calculateSellPrice } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader, SectionLabel } from "@/components/page-header";
+import { OrderStatusBadge } from "@/components/status-badge";
 import {
   Table,
   TableBody,
@@ -15,10 +16,7 @@ import {
 } from "@/components/ui/table";
 import { AddOrderItemForm } from "@/components/orders/add-order-item-form";
 import { RemoveOrderItemButton } from "@/components/orders/remove-order-item-button";
-import {
-  DISCOUNT_TYPE_LABELS,
-  ORDER_STATUS_LABELS,
-} from "@/lib/order-labels";
+import { DISCOUNT_TYPE_LABELS } from "@/lib/order-labels";
 import { formatDatePT, formatEUR } from "@/lib/format";
 
 export default async function OrderDetailPage({
@@ -62,15 +60,15 @@ export default async function OrderDetailPage({
 
   return (
     <div>
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">
+      <PageHeader
+        title={
+          <span className="flex items-center gap-3">
             {order.reference}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {order.supplierName || "Sem fornecedor definido"}
-          </p>
-        </div>
+            <OrderStatusBadge value={order.status} />
+          </span>
+        }
+        description={order.supplierName || "Sem fornecedor definido"}
+      >
         <Button
           variant="outline"
           nativeButton={false}
@@ -78,43 +76,39 @@ export default async function OrderDetailPage({
         >
           Editar
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="mt-6 flex flex-wrap gap-x-10 gap-y-3 text-sm">
+      <div className="mt-6 flex flex-wrap gap-x-10 gap-y-4 text-sm">
         <div>
-          <div className="text-xs text-muted-foreground">Estado</div>
-          <Badge variant="outline" className="mt-1">
-            {ORDER_STATUS_LABELS[order.status]}
-          </Badge>
+          <SectionLabel>Data</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
+            {formatDatePT(order.orderDate)}
+          </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Data</div>
-          <div className="mt-1 text-foreground">{formatDatePT(order.orderDate)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground">Moeda / câmbio</div>
-          <div className="mt-1 text-foreground">
+          <SectionLabel>Moeda / câmbio</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
             {order.originalCurrency} · 1 {order.originalCurrency} = {Number(order.exchangeRateToEUR)} EUR
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Total do fornecedor</div>
-          <div className="mt-1 text-foreground">
+          <SectionLabel>Total do fornecedor</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
             {Number(order.totalCostOriginal).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}{" "}
             {order.originalCurrency}
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Desconto</div>
-          <div className="mt-1 text-foreground">
+          <SectionLabel>Desconto</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
             {order.discountType === "NONE"
               ? "—"
               : `${DISCOUNT_TYPE_LABELS[order.discountType]}: ${Number(order.discountValue)}`}
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Direitos aduaneiros</div>
-          <div className="mt-1 text-foreground">
+          <SectionLabel>Direitos aduaneiros</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
             {Number(dutyPercent)}%
             {order.customsDutyPercent == null && (
               <span className="text-muted-foreground"> (defeito)</span>
@@ -122,8 +116,8 @@ export default async function OrderDetailPage({
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Desalfandegamento</div>
-          <div className="mt-1 text-foreground">
+          <SectionLabel>Desalfandegamento</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
             {formatEUR(clearanceFee)}
             {order.flatClearanceFee == null && (
               <span className="text-muted-foreground"> (defeito)</span>
@@ -133,14 +127,12 @@ export default async function OrderDetailPage({
       </div>
 
       {order.notes && (
-        <p className="mt-4 max-w-xl text-sm text-muted-foreground">
+        <p className="mt-6 max-w-xl text-sm text-muted-foreground">
           {order.notes}
         </p>
       )}
 
-      <h2 className="mt-10 text-sm font-medium text-foreground">
-        Itens da encomenda
-      </h2>
+      <SectionLabel className="mt-12">Itens da encomenda</SectionLabel>
       <div className="mt-3">
         {cartModels.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -163,17 +155,17 @@ export default async function OrderDetailPage({
         )}
       </div>
 
-      <div className="mt-6 rounded-lg border border-border">
+      <div className="mt-6 overflow-hidden rounded-xl border border-border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Modelo</TableHead>
-              <TableHead>Qtd</TableHead>
-              <TableHead>Custo/un.</TableHead>
-              <TableHead>Custo pousado (EUR)</TableHead>
-              <TableHead>Custo total</TableHead>
-              <TableHead>Preço venda s/IVA</TableHead>
-              <TableHead>Preço venda c/IVA</TableHead>
+              <TableHead className="text-right">Qtd</TableHead>
+              <TableHead className="text-right">Custo/un.</TableHead>
+              <TableHead className="text-right">Custo pousado (EUR)</TableHead>
+              <TableHead className="text-right">Custo total</TableHead>
+              <TableHead className="text-right">Preço venda s/IVA</TableHead>
+              <TableHead className="text-right">Preço venda c/IVA</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -182,7 +174,7 @@ export default async function OrderDetailPage({
               <TableRow>
                 <TableCell
                   colSpan={8}
-                  className="py-8 text-center text-sm text-muted-foreground"
+                  className="py-10 text-center text-sm text-muted-foreground"
                 >
                   Sem itens ainda.
                 </TableCell>
@@ -192,29 +184,29 @@ export default async function OrderDetailPage({
               <TableRow key={item.id}>
                 <TableCell className="font-medium text-foreground">
                   {item.cartModel.code}
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs font-normal text-muted-foreground">
                     {item.cartModel.name}
                   </div>
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {item.quantity}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {Number(item.unitGoodsCostOriginal).toLocaleString("pt-PT", {
                     minimumFractionDigits: 2,
                   })}{" "}
                   {order.originalCurrency}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {formatEUR(landedCostEUR)}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-right text-muted-foreground tabular-nums">
                   {formatEUR(totalCost)}
                 </TableCell>
-                <TableCell className="text-foreground">
+                <TableCell className="text-right text-foreground tabular-nums">
                   {formatEUR(sellPriceExVat)}
                 </TableCell>
-                <TableCell className="font-medium text-foreground">
+                <TableCell className="text-right font-medium text-foreground tabular-nums">
                   {formatEUR(sellPriceIncVat)}
                 </TableCell>
                 <TableCell className="text-right">

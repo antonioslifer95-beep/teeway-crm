@@ -6,8 +6,8 @@ import { StageSelect } from "@/components/clients/stage-select";
 import { AddActivityForm } from "@/components/clients/add-activity-form";
 import { ReminderToggle } from "@/components/clients/reminder-toggle";
 import { ACTIVITY_TYPE_LABELS } from "@/lib/pipeline";
-import { QUOTE_STATUS_LABELS } from "@/lib/quote-labels";
-import { INVOICE_STATUS_LABELS } from "@/lib/invoice-labels";
+import { PageHeader, SectionLabel } from "@/components/page-header";
+import { InvoiceStatusBadge, QuoteStatusBadge } from "@/components/status-badge";
 import { formatDatePT, formatDateTimePT, formatEUR } from "@/lib/format";
 
 export default async function ClientDetailPage({
@@ -56,18 +56,11 @@ export default async function ClientDetailPage({
   ].filter(Boolean);
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">
-            {client.companyName}
-          </h1>
-          {client.contactName && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {client.contactName}
-            </p>
-          )}
-        </div>
+    <div className="mx-auto max-w-4xl">
+      <PageHeader
+        title={client.companyName}
+        description={client.contactName || undefined}
+      >
         <Button
           variant="outline"
           nativeButton={false}
@@ -75,12 +68,12 @@ export default async function ClientDetailPage({
         >
           Editar
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="mt-6 flex flex-wrap items-center gap-6">
+      <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-4">
         <div>
-          <div className="text-xs text-muted-foreground">Fase</div>
-          <div className="mt-1.5">
+          <SectionLabel>Fase</SectionLabel>
+          <div className="mt-2">
             <StageSelect clientId={client.id} value={client.pipelineStage} />
           </div>
         </div>
@@ -100,7 +93,7 @@ export default async function ClientDetailPage({
       <div className="mt-10 grid gap-8 md:grid-cols-2">
         <div>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-foreground">Orçamentos</h2>
+            <SectionLabel>Orçamentos</SectionLabel>
             <Link
               href={`/quotes/new?clientId=${client.id}`}
               className="text-xs text-muted-foreground hover:text-foreground hover:underline"
@@ -116,20 +109,22 @@ export default async function ClientDetailPage({
               <li key={quote.id}>
                 <Link
                   href={`/quotes/${quote.id}`}
-                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-muted"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-medium text-foreground">
                       {quote.quoteNumber}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {QUOTE_STATUS_LABELS[quote.status]} ·{" "}
+                    <div className="text-xs text-muted-foreground tabular-nums">
                       {formatDatePT(quote.issueDate)}
                     </div>
                   </div>
-                  <span className="text-sm text-foreground">
-                    {formatEUR(quote.totalIncVat)}
-                  </span>
+                  <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
+                    <span className="text-sm font-medium text-foreground tabular-nums">
+                      {formatEUR(quote.totalIncVat)}
+                    </span>
+                    <QuoteStatusBadge value={quote.status} />
+                  </div>
                 </Link>
               </li>
             ))}
@@ -138,7 +133,7 @@ export default async function ClientDetailPage({
 
         <div>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-foreground">Faturas</h2>
+            <SectionLabel>Faturas</SectionLabel>
             <Link
               href={`/invoices/new?clientId=${client.id}`}
               className="text-xs text-muted-foreground hover:text-foreground hover:underline"
@@ -154,22 +149,22 @@ export default async function ClientDetailPage({
               <li key={invoice.id}>
                 <Link
                   href={`/invoices/${invoice.id}`}
-                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-muted"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-medium text-foreground">
                       {invoice.internalRef}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {INVOICE_STATUS_LABELS[invoice.status]}
-                      {invoice.issueDate
-                        ? ` · ${formatDatePT(invoice.issueDate)}`
-                        : ""}
+                    <div className="text-xs text-muted-foreground tabular-nums">
+                      {invoice.issueDate ? formatDatePT(invoice.issueDate) : "—"}
                     </div>
                   </div>
-                  <span className="text-sm text-foreground">
-                    {formatEUR(invoice.totalIncVat)}
-                  </span>
+                  <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
+                    <span className="text-sm font-medium text-foreground tabular-nums">
+                      {formatEUR(invoice.totalIncVat)}
+                    </span>
+                    <InvoiceStatusBadge value={invoice.status} />
+                  </div>
                 </Link>
               </li>
             ))}
@@ -177,9 +172,7 @@ export default async function ClientDetailPage({
         </div>
       </div>
 
-      <h2 className="mt-10 text-sm font-medium text-foreground">
-        Notas e atividade
-      </h2>
+      <SectionLabel className="mt-12">Notas e atividade</SectionLabel>
       <div className="mt-3">
         <AddActivityForm clientId={client.id} />
       </div>

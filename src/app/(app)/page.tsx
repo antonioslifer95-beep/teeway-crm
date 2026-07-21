@@ -2,8 +2,12 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PIPELINE_STAGE_LABELS, PIPELINE_STAGE_VALUES } from "@/lib/pipeline";
 import { ReminderToggle } from "@/components/clients/reminder-toggle";
-import { QUOTE_STATUS_LABELS } from "@/lib/quote-labels";
-import { INVOICE_STATUS_LABELS } from "@/lib/invoice-labels";
+import { PageHeader, SectionLabel } from "@/components/page-header";
+import {
+  InvoiceStatusBadge,
+  PipelineBadge,
+  QuoteStatusBadge,
+} from "@/components/status-badge";
 import { formatDatePT, formatEUR } from "@/lib/format";
 
 export default async function DashboardPage() {
@@ -41,28 +45,31 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
+      <PageHeader
+        title="Dashboard"
+        description="Vista geral do pipeline, lembretes e documentos recentes."
+      />
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {PIPELINE_STAGE_VALUES.map((stage) => (
           <Link
             key={stage}
             href={`/clients?stage=${stage}`}
-            className="rounded-lg border border-border p-4 hover:bg-muted"
+            className="rounded-xl border border-border p-4 transition-colors hover:border-foreground/20 hover:bg-muted"
           >
-            <div className="text-2xl font-semibold text-foreground">
+            <div className="text-3xl font-semibold tracking-tight text-foreground tabular-nums">
               {countByStage[stage] ?? 0}
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">
+            <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {PIPELINE_STAGE_LABELS[stage]}
             </div>
           </Link>
         ))}
       </div>
 
-      <div className="mt-8 grid gap-8 md:grid-cols-2">
+      <div className="mt-10 grid gap-8 md:grid-cols-2">
         <div>
-          <h2 className="text-sm font-medium text-foreground">Lembretes</h2>
+          <SectionLabel>Lembretes</SectionLabel>
           <ol className="mt-3 flex flex-col gap-2">
             {dueReminders.length === 0 && (
               <p className="text-sm text-muted-foreground">
@@ -101,9 +108,7 @@ export default async function DashboardPage() {
         </div>
 
         <div>
-          <h2 className="text-sm font-medium text-foreground">
-            Clientes recentes
-          </h2>
+          <SectionLabel>Clientes recentes</SectionLabel>
           <ol className="mt-3 flex flex-col gap-2">
             {recentClients.length === 0 && (
               <p className="text-sm text-muted-foreground">
@@ -118,14 +123,12 @@ export default async function DashboardPage() {
               <li key={client.id}>
                 <Link
                   href={`/clients/${client.id}`}
-                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-muted"
                 >
-                  <span className="text-sm font-medium text-foreground">
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground">
                     {client.companyName}
                   </span>
-                  <span className="text-xs text-muted-foreground">
-                    {PIPELINE_STAGE_LABELS[client.pipelineStage]}
-                  </span>
+                  <PipelineBadge value={client.pipelineStage} />
                 </Link>
               </li>
             ))}
@@ -133,12 +136,10 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-8 grid gap-8 md:grid-cols-2">
+      <div className="mt-10 grid gap-8 md:grid-cols-2">
         <div>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-foreground">
-              Orçamentos recentes
-            </h2>
+            <SectionLabel>Orçamentos recentes</SectionLabel>
             <Link
               href="/quotes"
               className="text-xs text-muted-foreground hover:text-foreground hover:underline"
@@ -156,20 +157,22 @@ export default async function DashboardPage() {
               <li key={quote.id}>
                 <Link
                   href={`/quotes/${quote.id}`}
-                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-muted"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-sm font-medium text-foreground">
                       {quote.quoteNumber}
                     </span>
-                    <p className="text-xs text-muted-foreground">
-                      {quote.client.companyName} ·{" "}
-                      {QUOTE_STATUS_LABELS[quote.status]}
+                    <p className="truncate text-xs text-muted-foreground">
+                      {quote.client.companyName}
                     </p>
                   </div>
-                  <span className="text-sm text-foreground">
-                    {formatEUR(quote.totalIncVat)}
-                  </span>
+                  <div className="flex flex-shrink-0 items-center gap-3">
+                    <span className="text-sm text-foreground tabular-nums">
+                      {formatEUR(quote.totalIncVat)}
+                    </span>
+                    <QuoteStatusBadge value={quote.status} />
+                  </div>
                 </Link>
               </li>
             ))}
@@ -178,9 +181,7 @@ export default async function DashboardPage() {
 
         <div>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-foreground">
-              Faturas recentes
-            </h2>
+            <SectionLabel>Faturas recentes</SectionLabel>
             <Link
               href="/invoices"
               className="text-xs text-muted-foreground hover:text-foreground hover:underline"
@@ -196,20 +197,22 @@ export default async function DashboardPage() {
               <li key={invoice.id}>
                 <Link
                   href={`/invoices/${invoice.id}`}
-                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-muted"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-sm font-medium text-foreground">
                       {invoice.internalRef}
                     </span>
-                    <p className="text-xs text-muted-foreground">
-                      {invoice.client.companyName} ·{" "}
-                      {INVOICE_STATUS_LABELS[invoice.status]}
+                    <p className="truncate text-xs text-muted-foreground">
+                      {invoice.client.companyName}
                     </p>
                   </div>
-                  <span className="text-sm text-foreground">
-                    {formatEUR(invoice.totalIncVat)}
-                  </span>
+                  <div className="flex flex-shrink-0 items-center gap-3">
+                    <span className="text-sm text-foreground tabular-nums">
+                      {formatEUR(invoice.totalIncVat)}
+                    </span>
+                    <InvoiceStatusBadge value={invoice.status} />
+                  </div>
                 </Link>
               </li>
             ))}
