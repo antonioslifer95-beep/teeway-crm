@@ -90,6 +90,16 @@ export async function createInvoiceAction(
 export async function createInvoiceFromQuoteAction(quoteId: string) {
   await requireAuth();
 
+  // Idempotency: a quote maps to at most one invoice. If one already exists,
+  // send the user there rather than silently creating a duplicate.
+  const existing = await prisma.invoice.findFirst({
+    where: { quoteId },
+    select: { id: true },
+  });
+  if (existing) {
+    redirect(`/invoices/${existing.id}`);
+  }
+
   const quote = await prisma.quote.findUnique({
     where: { id: quoteId },
     include: { lines: { orderBy: { position: "asc" } } },

@@ -6,7 +6,9 @@ import { StageSelect } from "@/components/clients/stage-select";
 import { AddActivityForm } from "@/components/clients/add-activity-form";
 import { ReminderToggle } from "@/components/clients/reminder-toggle";
 import { ACTIVITY_TYPE_LABELS } from "@/lib/pipeline";
-import { formatDatePT, formatDateTimePT } from "@/lib/format";
+import { QUOTE_STATUS_LABELS } from "@/lib/quote-labels";
+import { INVOICE_STATUS_LABELS } from "@/lib/invoice-labels";
+import { formatDatePT, formatDateTimePT, formatEUR } from "@/lib/format";
 
 export default async function ClientDetailPage({
   params,
@@ -21,6 +23,26 @@ export default async function ClientDetailPage({
       activities: {
         orderBy: { createdAt: "desc" },
         include: { author: { select: { name: true } } },
+      },
+      quotes: {
+        orderBy: { issueDate: "desc" },
+        select: {
+          id: true,
+          quoteNumber: true,
+          status: true,
+          issueDate: true,
+          totalIncVat: true,
+        },
+      },
+      invoices: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          internalRef: true,
+          status: true,
+          issueDate: true,
+          totalIncVat: true,
+        },
       },
     },
   });
@@ -73,6 +95,86 @@ export default async function ClientDetailPage({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="mt-10 grid gap-8 md:grid-cols-2">
+        <div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-foreground">Orçamentos</h2>
+            <Link
+              href={`/quotes/new?clientId=${client.id}`}
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+            >
+              + Novo
+            </Link>
+          </div>
+          <ol className="mt-3 flex flex-col gap-2">
+            {client.quotes.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sem orçamentos.</p>
+            )}
+            {client.quotes.map((quote) => (
+              <li key={quote.id}>
+                <Link
+                  href={`/quotes/${quote.id}`}
+                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-foreground">
+                      {quote.quoteNumber}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {QUOTE_STATUS_LABELS[quote.status]} ·{" "}
+                      {formatDatePT(quote.issueDate)}
+                    </div>
+                  </div>
+                  <span className="text-sm text-foreground">
+                    {formatEUR(quote.totalIncVat)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-foreground">Faturas</h2>
+            <Link
+              href={`/invoices/new?clientId=${client.id}`}
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+            >
+              + Nova
+            </Link>
+          </div>
+          <ol className="mt-3 flex flex-col gap-2">
+            {client.invoices.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sem faturas.</p>
+            )}
+            {client.invoices.map((invoice) => (
+              <li key={invoice.id}>
+                <Link
+                  href={`/invoices/${invoice.id}`}
+                  className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-foreground">
+                      {invoice.internalRef}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {INVOICE_STATUS_LABELS[invoice.status]}
+                      {invoice.issueDate
+                        ? ` · ${formatDatePT(invoice.issueDate)}`
+                        : ""}
+                    </div>
+                  </div>
+                  <span className="text-sm text-foreground">
+                    {formatEUR(invoice.totalIncVat)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
 
       <h2 className="mt-10 text-sm font-medium text-foreground">

@@ -30,6 +30,10 @@ export default async function QuoteDetailPage({
       include: {
         client: true,
         lines: { orderBy: { position: "asc" } },
+        invoices: {
+          orderBy: { createdAt: "desc" },
+          select: { id: true, internalRef: true },
+        },
       },
     }),
     prisma.order.findMany({
@@ -57,7 +61,12 @@ export default async function QuoteDetailPage({
             {quote.quoteNumber}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {quote.client.companyName}
+            <Link
+              href={`/clients/${quote.client.id}`}
+              className="hover:text-foreground hover:underline"
+            >
+              {quote.client.companyName}
+            </Link>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -74,7 +83,17 @@ export default async function QuoteDetailPage({
           >
             Ver / Exportar PDF
           </Button>
-          {quote.lines.length > 0 && <CreateInvoiceButton quoteId={quote.id} />}
+          {quote.invoices.length > 0 ? (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={`/invoices/${quote.invoices[0].id}`} />}
+            >
+              Ver fatura {quote.invoices[0].internalRef}
+            </Button>
+          ) : (
+            quote.lines.length > 0 && <CreateInvoiceButton quoteId={quote.id} />
+          )}
         </div>
       </div>
 

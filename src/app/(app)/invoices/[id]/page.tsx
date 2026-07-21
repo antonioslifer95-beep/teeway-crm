@@ -45,7 +45,12 @@ export default async function InvoiceDetailPage({
             {invoice.internalRef}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {invoice.client.companyName}
+            <Link
+              href={`/clients/${invoice.client.id}`}
+              className="hover:text-foreground hover:underline"
+            >
+              {invoice.client.companyName}
+            </Link>
             {invoice.quote && (
               <>
                 {" · a partir do orçamento "}

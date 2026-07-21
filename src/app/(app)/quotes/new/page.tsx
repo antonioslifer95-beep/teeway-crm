@@ -3,7 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { QuoteForm } from "@/components/quotes/quote-form";
 import { createQuoteAction } from "@/lib/actions/quotes";
 
-export default async function NewQuotePage() {
+export default async function NewQuotePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ clientId?: string }>;
+}) {
+  const { clientId } = await searchParams;
   const clients = await prisma.client.findMany({
     orderBy: { companyName: "asc" },
     select: { id: true, companyName: true },
@@ -25,6 +30,7 @@ export default async function NewQuotePage() {
           <QuoteForm
             action={createQuoteAction}
             clients={clients}
+            defaultValues={clientId ? { clientId } : undefined}
             submitLabel="Criar orçamento"
           />
         )}

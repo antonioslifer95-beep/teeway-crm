@@ -5,8 +5,14 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-guard";
 import { getSettings } from "@/lib/settings";
+import { PIPELINE_STAGE_LABELS } from "@/lib/pipeline";
+import { QUOTE_STATUS_LABELS } from "@/lib/quote-labels";
 import { calculateLandedCostsForOrder, calculateSellPrice } from "@/lib/pricing";
-import { Prisma, type QuoteStatus } from "@/generated/prisma/client";
+import {
+  Prisma,
+  type PipelineStage,
+  type QuoteStatus,
+} from "@/generated/prisma/client";
 import {
   quoteFormSchema,
   quoteLineCustomSchema,
@@ -167,17 +173,61 @@ export async function updateQuoteAction(
   redirect(`/quotes/${quoteId}`);
 }
 
+/**
+ * When a quote's status changes, nudge the client's pipeline stage forward to
+ * keep the CRM in sync — but only ever forward, never back (a rejected quote
+ * doesn't undo a client that's already Won). Returns the target stage, or null
+ * if this status shouldn't move the client from its current stage.
+ */
+function pipelineStageForQuoteStatus(
+  status: QuoteStatus,
+  currentStage: PipelineStage,
+): PipelineStage | null {
+  if (status === "SENT") {
+    return currentStage === "LEAD" || currentStage === "CONTACTED"
+      ? "BUDGET_SENT"
+      : null;
+  }
+  if (status === "ACCEPTED") {
+    return currentStage === "WON" ? null : "WON";
+  }
+  return null;
+}
+
 export async function updateQuoteStatusAction(
   quoteId: string,
   status: QuoteStatus,
 ): Promise<{ error?: string }> {
-  await requireAuth();
+  const session = await requireAuth();
 
   try {
-    await prisma.quote.update({
+    const quote = await prisma.quote.update({
       where: { id: quoteId },
       data: { status },
+      include: { client: { select: { id: true, pipelineStage: true } } },
     });
+
+    const nextStage = pipelineStageForQuoteStatus(
+      status,
+      quote.client.pipelineStage,
+    );
+    if (nextStage) {
+      await prisma.client.update({
+        where: { id: quote.client.id },
+        data: {
+          pipelineStage: nextStage,
+          activities: {
+            create: {
+              type: "SYSTEM",
+              body: `Fase movida para "${PIPELINE_STAGE_LABELS[nextStage]}" — orçamento ${quote.quoteNumber} marcado como "${QUOTE_STATUS_LABELS[status]}".`,
+              authorUserId: session.user.id,
+            },
+          },
+        },
+      });
+      revalidatePath("/clients");
+      revalidatePath(`/clients/${quote.client.id}`);
+    }
   } catch {
     return { error: "Não foi possível atualizar o estado." };
   }

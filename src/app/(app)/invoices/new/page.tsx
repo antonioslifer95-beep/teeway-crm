@@ -3,7 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
 import { createInvoiceAction } from "@/lib/actions/invoices";
 
-export default async function NewInvoicePage() {
+export default async function NewInvoicePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ clientId?: string }>;
+}) {
+  const { clientId } = await searchParams;
   const clients = await prisma.client.findMany({
     orderBy: { companyName: "asc" },
     select: { id: true, companyName: true },
@@ -30,6 +35,7 @@ export default async function NewInvoicePage() {
           <InvoiceForm
             action={createInvoiceAction}
             clients={clients}
+            defaultValues={clientId ? { clientId } : undefined}
             submitLabel="Criar fatura"
           />
         )}
