@@ -21,6 +21,13 @@
   line-height: 1.5;
   font-family: var(--font-sans), -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
+
+  /* Force the brand's dark header bar, dark total box and grey fills to
+     survive print-to-PDF. Without this Chrome drops every background color
+     (the "Background graphics" checkbox is off by default) and the white
+     text on those bars turns invisible — the PDF looks nothing like screen. */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 .docBody {
