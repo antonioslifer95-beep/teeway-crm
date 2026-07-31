@@ -3,8 +3,8 @@
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth-guard";
-import { userFormSchema } from "@/lib/validations/user";
+import { requireAdmin, requireAuth } from "@/lib/auth-guard";
+import { changePasswordSchema, userFormSchema } from "@/lib/validations/user";
 
 export async function createUserAction(
   _prevState: string | undefined,
@@ -70,4 +70,44 @@ export async function toggleUserActiveAction(
 
   revalidatePath("/settings/users");
   return {};
+}
+
+export async function changePasswordAction(
+  _prevState: { ok: boolean; error?: string } | undefined,
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  // Any authenticated user can change their OWN password — the session id is
+  // the only account this can ever touch, so there's no target-user parameter.
+  const session = await requireAuth();
+
+  const parsed = changePasswordSchema.safeParse({
+    currentPassword: formData.get("currentPassword"),
+    newPassword: formData.get("newPassword"),
+    confirmPassword: formData.get("confirmPassword"),
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user) {
+    return { ok: false, error: "Utilizador não encontrado." };
+  }
+
+  const valid = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
+  if (!valid) {
+    return { ok: false, error: "A palavra-passe atual está incorreta." };
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+  } catch {
+    return { ok: false, error: "Não foi possível atualizar a palavra-passe." };
+  }
+
+  return { ok: true };
 }

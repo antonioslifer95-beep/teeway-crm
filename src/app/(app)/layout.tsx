@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/auth";
 import { logoutAction } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -32,12 +33,15 @@ export default async function AppLayout({
             </nav>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden text-xs text-white/55 sm:inline">
+            <Link
+              href="/account"
+              className="hidden items-center text-xs text-white/55 transition-colors hover:text-white sm:inline-flex"
+            >
               {session?.user?.name}
               <span className="ml-1.5 rounded-full border border-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-white/70">
                 {session?.user?.role}
               </span>
-            </span>
+            </Link>
             <ThemeToggle className="text-white/70 hover:bg-white/10 hover:text-white" />
             <form action={logoutAction}>
               <Button
