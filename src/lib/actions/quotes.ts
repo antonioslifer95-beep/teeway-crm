@@ -278,7 +278,10 @@ export async function addQuoteLineFromOrderAction(
         cartModelId: cartModel.id,
         orderId: orderCartItem.orderId,
         orderCartItemId: orderCartItem.id,
-        name: `${cartModel.code} — ${cartModel.name}`,
+        // Commercial name first, factory code in brackets: the customer reads
+        // "Fairway 6", and the code is what the CE declaration and the purchase
+        // order call the same vehicle. See documents/gama-teeway.md.
+        name: `${cartModel.name} (${cartModel.code})`,
         specText: cartModel.defaultDescription,
         quantity,
         unitLandedCostEUR: computed.landedCostEUR,
