@@ -2,12 +2,13 @@
 // See plan: C:\Users\anton\.claude\plans\stateless-jumping-nova.md
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
-  // "native" for local dev; "rhel-openssl-3.0.x" is Vercel's Lambda runtime.
-  // Without the runtime target, prisma generate only builds the local engine
-  // and every query on Vercel throws "could not locate the Query Engine".
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  // engineType "client" = Prisma's WASM query compiler (no native Rust engine).
+  // Paired with the Neon driver adapter (src/lib/prisma.ts), there is no
+  // platform-specific .so.node to bundle — which is what Vercel could never do
+  // with this custom generated-client path.
+  engineType = "client"
 }
 
 datasource db {
