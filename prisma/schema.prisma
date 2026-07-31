@@ -4,6 +4,10 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  // "native" for local dev; "rhel-openssl-3.0.x" is Vercel's Lambda runtime.
+  // Without the runtime target, prisma generate only builds the local engine
+  // and every query on Vercel throws "could not locate the Query Engine".
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
