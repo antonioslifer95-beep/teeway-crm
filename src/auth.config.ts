@@ -4,6 +4,12 @@ import type { NextAuthConfig } from "next-auth";
 // middleware (Edge runtime). The Credentials provider itself is added
 // only in src/auth.ts, which runs in the Node runtime.
 export const authConfig = {
+  // Trust the incoming request host when building callback URLs. On Vercel
+  // this is auto-enabled, but we set it explicitly so it never depends on
+  // platform detection — and because the app is served on two hostnames
+  // (teeway-crm.vercel.app and app.teeway.pt), deriving URLs from the request
+  // host (rather than a pinned AUTH_URL) is what keeps sign-in working on both.
+  trustHost: true,
   pages: {
     signIn: "/login",
   },
