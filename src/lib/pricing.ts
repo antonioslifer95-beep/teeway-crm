@@ -72,6 +72,77 @@ export function calculateLandedCostsForOrder(
   });
 }
 
+export interface OrderItemCostBreakdown {
+  /** Goods + this cart's transport share, post-discount, in EUR. */
+  baseLandedEUR: Decimal;
+  /** The per-cart extra/accessory, post-discount, in EUR (0 if none). */
+  extraLandedEUR: Decimal;
+}
+
+/**
+ * Same landed-cost logic as calculateLandedCostsForOrder, but split into the
+ * base cart (goods + transport) and the extra accessory separately, so a quote
+ * can bill the accessory on its own line while the base cart keeps the price it
+ * would have with no extra. `baseLandedEUR + extraLandedEUR` equals the item's
+ * CIF (to the cent). Index-aligned with `items`.
+ */
+export function calculateOrderItemCostBreakdown(
+  order: OrderForPricing,
+  items: OrderItemForPricing[],
+): OrderItemCostBreakdown[] {
+  const lineValues = items.map((item) =>
+    new D(item.unitGoodsCostOriginal)
+      .add(new D(item.extraCostOriginal ?? 0))
+      .mul(item.quantity),
+  );
+  const totalMerchValue = lineValues.reduce((sum, v) => sum.add(v), new D(0));
+
+  let totalDiscount = new D(0);
+  if (order.discountType === "FLAT") {
+    totalDiscount = new D(order.discountValue);
+  } else if (order.discountType === "PERCENT") {
+    totalDiscount = totalMerchValue.mul(new D(order.discountValue)).div(100);
+  }
+
+  const totalCarts = items.reduce((sum, item) => sum + item.quantity, 0);
+  const transportPerUnit =
+    totalCarts > 0
+      ? new D(order.transportCostOriginal ?? 0).div(totalCarts)
+      : new D(0);
+
+  const exchangeRate = new D(order.exchangeRateToEUR);
+
+  return items.map((item, i) => {
+    const goods = new D(item.unitGoodsCostOriginal);
+    const extra = new D(item.extraCostOriginal ?? 0);
+    const merchPerUnit = goods.add(extra);
+
+    // The discount reduces this item's merchandise proportionally; apply the
+    // same ratio to goods and extra so the split still sums to the discounted CIF.
+    const discountShare = totalMerchValue.isZero()
+      ? new D(0)
+      : lineValues[i].div(totalMerchValue).mul(totalDiscount);
+    const discountedMerchPerUnit = lineValues[i]
+      .sub(discountShare)
+      .div(item.quantity);
+    const ratio = merchPerUnit.isZero()
+      ? new D(0)
+      : discountedMerchPerUnit.div(merchPerUnit);
+
+    const baseLandedEUR = goods
+      .mul(ratio)
+      .add(transportPerUnit)
+      .mul(exchangeRate)
+      .toDecimalPlaces(2);
+    const extraLandedEUR = extra
+      .mul(ratio)
+      .mul(exchangeRate)
+      .toDecimalPlaces(2);
+
+    return { baseLandedEUR, extraLandedEUR };
+  });
+}
+
 export interface SellPriceInputs {
   landedCostEUR: DecimalInput;
   customsDutyPercent: DecimalInput;

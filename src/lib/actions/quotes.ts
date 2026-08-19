@@ -7,7 +7,7 @@ import { requireAuth } from "@/lib/auth-guard";
 import { getSettings } from "@/lib/settings";
 import { PIPELINE_STAGE_LABELS } from "@/lib/pipeline";
 import { QUOTE_STATUS_LABELS } from "@/lib/quote-labels";
-import { calculateLandedCostsForOrder, calculateSellPrice } from "@/lib/pricing";
+import { calculateOrderItemCostBreakdown, calculateSellPrice } from "@/lib/pricing";
 import {
   Prisma,
   type PipelineStage,
@@ -54,6 +54,13 @@ async function recalcQuoteTotals(quoteId: string) {
   });
 }
 
+/**
+ * Prices an order item as a client-facing quote line, split into the base cart
+ * (goods + transport, with the per-vehicle clearance fee) and — when the item
+ * carries an accessory — a separate extra priced on its own (duty + markup +
+ * VAT, no clearance). This keeps the base cart at the price it would have with
+ * no extra, and bills the accessory transparently on its own line.
+ */
 async function computeOrderItemPricing(
   orderCartItemId: string,
   markupOverride: number | undefined,
@@ -67,29 +74,44 @@ async function computeOrderItemPricing(
   const settings = await getSettings();
   const { order } = orderCartItem;
   const index = order.items.findIndex((i) => i.id === orderCartItemId);
-  const landedCostEUR = calculateLandedCostsForOrder(order, order.items)[index];
+  const breakdown = calculateOrderItemCostBreakdown(order, order.items)[index];
 
   const customsDutyPercent = order.customsDutyPercent ?? settings.defaultCustomsDutyPercent;
   const clearanceFee = order.flatClearanceFee ?? settings.defaultClearanceFee;
   const markupPercent = markupOverride ?? settings.defaultMarkupPercent;
   const vatRate = settings.vatRate;
 
-  const pricing = calculateSellPrice({
-    landedCostEUR,
+  const base = calculateSellPrice({
+    landedCostEUR: breakdown.baseLandedEUR,
     customsDutyPercent,
     clearanceFee,
     markupPercent,
     vatRate,
   });
 
+  const hasExtra = new D(breakdown.extraLandedEUR).greaterThan(0);
+  const extra = hasExtra
+    ? {
+        description: orderCartItem.extraDescription,
+        landedCostEUR: breakdown.extraLandedEUR,
+        ...calculateSellPrice({
+          landedCostEUR: breakdown.extraLandedEUR,
+          customsDutyPercent,
+          clearanceFee: 0, // clearance is per vehicle, charged on the base line
+          markupPercent,
+          vatRate,
+        }),
+      }
+    : null;
+
   return {
     orderCartItem,
-    landedCostEUR,
     customsDutyPercent,
     clearanceFee,
     markupPercent,
     vatRate,
-    ...pricing,
+    base: { landedCostEUR: breakdown.baseLandedEUR, ...base },
+    extra,
   };
 }
 
@@ -262,39 +284,63 @@ export async function addQuoteLineFromOrderAction(
   const { orderCartItem } = computed;
   const { cartModel } = orderCartItem;
   const quantity = parsed.data.quantity;
-  const lineTotalExVat = computed.sellPriceExVat.mul(quantity).toDecimalPlaces(2);
-  const lineTotalIncVat = computed.sellPriceIncVat.mul(quantity).toDecimalPlaces(2);
 
   const maxPosition = await prisma.quoteLine.aggregate({
     where: { quoteId },
     _max: { position: true },
   });
+  let position = (maxPosition._max.position ?? 0) + 1;
 
   try {
+    // Base cart line — commercial name only; the internal factory code is
+    // deliberately hidden from the client-facing orçamento (still linked via
+    // cartModelId for internal reference).
     await prisma.quoteLine.create({
       data: {
         quoteId,
-        position: (maxPosition._max.position ?? 0) + 1,
+        position,
         cartModelId: cartModel.id,
         orderId: orderCartItem.orderId,
         orderCartItemId: orderCartItem.id,
-        // Commercial name first, factory code in brackets: the customer reads
-        // "Fairway 6", and the code is what the CE declaration and the purchase
-        // order call the same vehicle. See documents/gama-teeway.md.
-        name: `${cartModel.name} (${cartModel.code})`,
+        name: cartModel.name,
         specText: cartModel.defaultDescription,
         quantity,
-        unitLandedCostEUR: computed.landedCostEUR,
+        unitLandedCostEUR: computed.base.landedCostEUR,
         customsDutyPercentSnapshot: computed.customsDutyPercent,
         clearanceFeeSnapshot: computed.clearanceFee,
         markupPercentSnapshot: computed.markupPercent,
         vatRateSnapshot: computed.vatRate,
-        unitSellPriceExVat: computed.sellPriceExVat,
-        unitSellPriceIncVat: computed.sellPriceIncVat,
-        lineTotalExVat,
-        lineTotalIncVat,
+        unitSellPriceExVat: computed.base.sellPriceExVat,
+        unitSellPriceIncVat: computed.base.sellPriceIncVat,
+        lineTotalExVat: computed.base.sellPriceExVat.mul(quantity).toDecimalPlaces(2),
+        lineTotalIncVat: computed.base.sellPriceIncVat.mul(quantity).toDecimalPlaces(2),
       },
     });
+
+    // Separate accessory line so the base cart keeps its standard price and the
+    // extra is billed transparently. Unlinked from the order item (no recalc
+    // source) so it behaves like a custom line.
+    if (computed.extra) {
+      position += 1;
+      await prisma.quoteLine.create({
+        data: {
+          quoteId,
+          position,
+          orderId: orderCartItem.orderId,
+          name: computed.extra.description || "Extra",
+          quantity,
+          unitLandedCostEUR: computed.extra.landedCostEUR,
+          customsDutyPercentSnapshot: computed.customsDutyPercent,
+          clearanceFeeSnapshot: 0,
+          markupPercentSnapshot: computed.markupPercent,
+          vatRateSnapshot: computed.vatRate,
+          unitSellPriceExVat: computed.extra.sellPriceExVat,
+          unitSellPriceIncVat: computed.extra.sellPriceIncVat,
+          lineTotalExVat: computed.extra.sellPriceExVat.mul(quantity).toDecimalPlaces(2),
+          lineTotalIncVat: computed.extra.sellPriceIncVat.mul(quantity).toDecimalPlaces(2),
+        },
+      });
+    }
   } catch {
     return "Não foi possível adicionar a linha.";
   }
@@ -397,20 +443,22 @@ export async function recalculateQuoteLineAction(
   );
   if (!computed) return { error: "Item de encomenda de origem já não existe." };
 
-  const lineTotalExVat = computed.sellPriceExVat.mul(line.quantity).toDecimalPlaces(2);
-  const lineTotalIncVat = computed.sellPriceIncVat.mul(line.quantity).toDecimalPlaces(2);
+  // Only base cart lines keep an orderCartItemId, so recalc always refreshes the
+  // base price (the accessory line is unlinked and treated like a custom line).
+  const lineTotalExVat = computed.base.sellPriceExVat.mul(line.quantity).toDecimalPlaces(2);
+  const lineTotalIncVat = computed.base.sellPriceIncVat.mul(line.quantity).toDecimalPlaces(2);
 
   try {
     await prisma.quoteLine.update({
       where: { id: lineId },
       data: {
-        unitLandedCostEUR: computed.landedCostEUR,
+        unitLandedCostEUR: computed.base.landedCostEUR,
         customsDutyPercentSnapshot: computed.customsDutyPercent,
         clearanceFeeSnapshot: computed.clearanceFee,
         markupPercentSnapshot: computed.markupPercent,
         vatRateSnapshot: computed.vatRate,
-        unitSellPriceExVat: computed.sellPriceExVat,
-        unitSellPriceIncVat: computed.sellPriceIncVat,
+        unitSellPriceExVat: computed.base.sellPriceExVat,
+        unitSellPriceIncVat: computed.base.sellPriceIncVat,
         lineTotalExVat,
         lineTotalIncVat,
       },

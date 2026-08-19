@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { calculateLandedCostsForOrder, calculateSellPrice } from "./pricing";
+import {
+  calculateLandedCostsForOrder,
+  calculateOrderItemCostBreakdown,
+  calculateSellPrice,
+} from "./pricing";
 
 describe("calculateLandedCostsForOrder", () => {
   it("converts a single item to EUR with no discount", () => {
@@ -93,6 +97,34 @@ describe("calculateLandedCostsForOrder", () => {
     // VY-A2 CIF = 2452 + 482 + 1432.50 = 4366.50 (spreadsheet cell F15).
     expect(landed[0].toFixed(2)).toBe("4366.50");
     expect(landed[1].toFixed(2)).toBe("4078.50");
+  });
+});
+
+describe("calculateOrderItemCostBreakdown", () => {
+  it("splits CIF into base (goods + transport) and extra, summing back to CIF", () => {
+    const order = {
+      exchangeRateToEUR: 1,
+      discountType: "NONE" as const,
+      discountValue: 0,
+      transportCostOriginal: 5730,
+    };
+    const items = [
+      { unitGoodsCostOriginal: 2452, extraCostOriginal: 482, quantity: 1 }, // VY-A2
+      { unitGoodsCostOriginal: 2561, extraCostOriginal: 85, quantity: 1 },
+      { unitGoodsCostOriginal: 2860, extraCostOriginal: 0, quantity: 1 },
+      { unitGoodsCostOriginal: 2732, extraCostOriginal: 0, quantity: 1 },
+    ];
+    const b = calculateOrderItemCostBreakdown(order, items);
+    // VY-A2: base = 2452 + 1432.50 transport = 3884.50; extra = 482.00.
+    expect(b[0].baseLandedEUR.toFixed(2)).toBe("3884.50");
+    expect(b[0].extraLandedEUR.toFixed(2)).toBe("482.00");
+    // base + extra equals the item's CIF from the combined calculation.
+    const cif = calculateLandedCostsForOrder(order, items);
+    items.forEach((_, i) => {
+      expect(b[i].baseLandedEUR.add(b[i].extraLandedEUR).toFixed(2)).toBe(
+        cif[i].toFixed(2),
+      );
+    });
   });
 });
 
