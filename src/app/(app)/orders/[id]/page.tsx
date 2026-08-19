@@ -54,9 +54,21 @@ export default async function OrderDetailPage({
   });
 
   const itemsValueOriginal = order.items.reduce(
-    (sum, item) => sum + Number(item.unitGoodsCostOriginal) * item.quantity,
+    (sum, item) =>
+      sum +
+      (Number(item.unitGoodsCostOriginal) + Number(item.extraCostOriginal)) *
+        item.quantity,
     0,
   );
+
+  const totalCarts = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const transportPerUnitLabel =
+    totalCarts > 0 && Number(order.transportCostOriginal) > 0
+      ? `${(Number(order.transportCostOriginal) / totalCarts).toLocaleString(
+          "pt-PT",
+          { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+        )} ${order.originalCurrency}`
+      : null;
 
   return (
     <div>
@@ -96,6 +108,16 @@ export default async function OrderDetailPage({
           <div className="mt-2 text-foreground tabular-nums">
             {Number(order.totalCostOriginal).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}{" "}
             {order.originalCurrency}
+          </div>
+        </div>
+        <div>
+          <SectionLabel>Transporte do envio</SectionLabel>
+          <div className="mt-2 text-foreground tabular-nums">
+            {Number(order.transportCostOriginal).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}{" "}
+            {order.originalCurrency}
+            {transportPerUnitLabel && (
+              <span className="text-muted-foreground"> · {transportPerUnitLabel}/un</span>
+            )}
           </div>
         </div>
         <div>
@@ -162,7 +184,7 @@ export default async function OrderDetailPage({
               <TableHead>Modelo</TableHead>
               <TableHead className="text-right">Qtd</TableHead>
               <TableHead className="text-right">Custo/un.</TableHead>
-              <TableHead className="text-right">Custo pousado (EUR)</TableHead>
+              <TableHead className="text-right">CIF/un. (EUR)</TableHead>
               <TableHead className="text-right">Custo total</TableHead>
               <TableHead className="text-right">Preço venda s/IVA</TableHead>
               <TableHead className="text-right">Preço venda c/IVA</TableHead>
@@ -187,6 +209,15 @@ export default async function OrderDetailPage({
                   <div className="text-xs font-normal text-muted-foreground">
                     {item.cartModel.name}
                   </div>
+                  {Number(item.extraCostOriginal) > 0 && (
+                    <div className="text-xs font-normal text-muted-foreground">
+                      + {item.extraDescription || "extra"}:{" "}
+                      {Number(item.extraCostOriginal).toLocaleString("pt-PT", {
+                        minimumFractionDigits: 2,
+                      })}{" "}
+                      {order.originalCurrency}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground tabular-nums">
                   {item.quantity}

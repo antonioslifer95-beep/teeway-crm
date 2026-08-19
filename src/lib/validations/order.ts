@@ -8,6 +8,10 @@ export const orderFormSchema = z.object({
   orderDate: z.string().min(1, "Obrigatório"),
   originalCurrency: z.string().trim().min(1).default("EUR"),
   totalCostOriginal: z.coerce.number().min(0),
+  transportCostOriginal: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().min(0).default(0),
+  ),
   exchangeRateToEUR: z.coerce.number().positive(),
   discountType: z.enum(["NONE", "FLAT", "PERCENT"]),
   discountValue: z.coerce.number().min(0),
@@ -29,6 +33,11 @@ export const orderItemFormSchema = z.object({
   cartModelId: z.string().min(1, "Obrigatório"),
   quantity: z.coerce.number().int().positive(),
   unitGoodsCostOriginal: z.coerce.number().min(0),
+  extraDescription: z.string().trim().optional().or(z.literal("")),
+  extraCostOriginal: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().min(0).default(0),
+  ),
 });
 
 export type OrderItemFormValues = z.infer<typeof orderItemFormSchema>;

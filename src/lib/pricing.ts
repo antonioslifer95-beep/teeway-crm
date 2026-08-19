@@ -8,51 +8,67 @@ export interface OrderForPricing {
   exchangeRateToEUR: DecimalInput;
   discountType: "NONE" | "FLAT" | "PERCENT";
   discountValue: DecimalInput;
+  // Total shipment transport in the supplier's currency; split evenly per cart.
+  // Optional so older callers/tests without transport still behave (treated 0).
+  transportCostOriginal?: DecimalInput;
 }
 
 export interface OrderItemForPricing {
   unitGoodsCostOriginal: DecimalInput;
+  // Optional per-cart accessory cost in the supplier's currency (default 0).
+  extraCostOriginal?: DecimalInput;
   quantity: number;
 }
 
 /**
- * Landed cost per unit in EUR for every item in an order: the producer's
- * order-level discount (if any) is distributed proportionally across items
- * by their share of the total order value, then converted to EUR using the
- * order's exchange rate. Returned array is index-aligned with `items`.
+ * CIF landed cost per unit in EUR for every item in an order, matching the
+ * "Cálculo Interno" spreadsheet: goods + extra accessory + a per-cart share of
+ * the shipment's transport = the CIF value customs duty is charged on.
  *
- * The producer's proforma already bundles goods + shipping into one cost
- * per item — this function does NOT add freight, only discount + FX.
+ * Steps (all in the supplier's currency, converted to EUR at the very end):
+ *   merchandise_line   = (goods + extra) × quantity
+ *   discount is distributed across items by their merchandise-value share
+ *   transport_per_unit = total_transport / total_carts   (even split by cart)
+ *   cif_per_unit       = discounted_merchandise_per_unit + transport_per_unit
+ *
+ * Returned array is index-aligned with `items`. Duty is then applied to this
+ * value in calculateSellPrice, so duty lands on CIF, not on the goods alone.
  */
 export function calculateLandedCostsForOrder(
   order: OrderForPricing,
   items: OrderItemForPricing[],
 ): Decimal[] {
+  // Merchandise = goods + optional extra accessory, per line (× quantity).
   const lineValues = items.map((item) =>
-    new D(item.unitGoodsCostOriginal).mul(item.quantity),
+    new D(item.unitGoodsCostOriginal)
+      .add(new D(item.extraCostOriginal ?? 0))
+      .mul(item.quantity),
   );
-  const totalOrderValue = lineValues.reduce(
-    (sum, v) => sum.add(v),
-    new D(0),
-  );
+  const totalMerchValue = lineValues.reduce((sum, v) => sum.add(v), new D(0));
 
   let totalDiscount = new D(0);
   if (order.discountType === "FLAT") {
     totalDiscount = new D(order.discountValue);
   } else if (order.discountType === "PERCENT") {
-    totalDiscount = totalOrderValue.mul(new D(order.discountValue)).div(100);
+    totalDiscount = totalMerchValue.mul(new D(order.discountValue)).div(100);
   }
+
+  const totalCarts = items.reduce((sum, item) => sum + item.quantity, 0);
+  const transportPerUnit =
+    totalCarts > 0
+      ? new D(order.transportCostOriginal ?? 0).div(totalCarts)
+      : new D(0);
 
   const exchangeRate = new D(order.exchangeRateToEUR);
 
   return items.map((item, i) => {
     const lineValue = lineValues[i];
-    const discountShare = totalOrderValue.isZero()
+    const discountShare = totalMerchValue.isZero()
       ? new D(0)
-      : lineValue.div(totalOrderValue).mul(totalDiscount);
-    const discountedLineValue = lineValue.sub(discountShare);
-    const discountedUnitCost = discountedLineValue.div(item.quantity);
-    return discountedUnitCost.mul(exchangeRate).toDecimalPlaces(2);
+      : lineValue.div(totalMerchValue).mul(totalDiscount);
+    const discountedMerchPerUnit = lineValue.sub(discountShare).div(item.quantity);
+    const cifPerUnitOriginal = discountedMerchPerUnit.add(transportPerUnit);
+    return cifPerUnitOriginal.mul(exchangeRate).toDecimalPlaces(2);
   });
 }
 

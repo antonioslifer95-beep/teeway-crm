@@ -74,6 +74,26 @@ describe("calculateLandedCostsForOrder", () => {
     const [landed] = calculateLandedCostsForOrder(order, items);
     expect(landed.toFixed(2)).toBe("0.00");
   });
+
+  it("folds transport (split per cart) and per-cart extra into CIF", () => {
+    // Cálculo Interno fixture: 5730 transport over 4 carts = 1432.50/un.
+    const order = {
+      exchangeRateToEUR: 1,
+      discountType: "NONE" as const,
+      discountValue: 0,
+      transportCostOriginal: 5730,
+    };
+    const items = [
+      { unitGoodsCostOriginal: 2452, extraCostOriginal: 482, quantity: 1 }, // VY-A2
+      { unitGoodsCostOriginal: 2561, extraCostOriginal: 85, quantity: 1 },
+      { unitGoodsCostOriginal: 2860, extraCostOriginal: 0, quantity: 1 },
+      { unitGoodsCostOriginal: 2732, extraCostOriginal: 0, quantity: 1 },
+    ];
+    const landed = calculateLandedCostsForOrder(order, items);
+    // VY-A2 CIF = 2452 + 482 + 1432.50 = 4366.50 (spreadsheet cell F15).
+    expect(landed[0].toFixed(2)).toBe("4366.50");
+    expect(landed[1].toFixed(2)).toBe("4078.50");
+  });
 });
 
 describe("calculateSellPrice", () => {
@@ -105,5 +125,21 @@ describe("calculateSellPrice", () => {
     });
     expect(result.sellPriceExVat.toFixed(2)).toBe("1000.00");
     expect(result.sellPriceIncVat.toFixed(2)).toBe("1230.00");
+  });
+
+  it("reproduces the VY-A2 spreadsheet line end-to-end (10 107,16 €)", () => {
+    // Feeding the CIF value from calculateLandedCostsForOrder (4366.50) through
+    // must land exactly on the reference orçamento template's VY-A2 figures.
+    const result = calculateSellPrice({
+      landedCostEUR: 4366.5,
+      customsDutyPercent: 12.3,
+      clearanceFee: 150,
+      markupPercent: 100,
+      vatRate: 23,
+    });
+    expect(result.duty.toFixed(2)).toBe("537.08"); // ROUND(4366.50 × 12.3%, 2)
+    expect(result.totalCost.toFixed(2)).toBe("5053.58"); // CIF + duty + 150
+    expect(result.sellPriceExVat.toFixed(2)).toBe("10107.16");
+    expect(result.sellPriceIncVat.toFixed(2)).toBe("12431.81");
   });
 });

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DecimalInput, IntegerInput } from "@/components/ui/numeric-input";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -88,6 +89,24 @@ export function AddOrderItemForm({
           onChange={(e) => setCost(e.target.value)}
           className="w-32"
           required
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="extraDescription">Extra (descrição)</Label>
+        <Input
+          id="extraDescription"
+          name="extraDescription"
+          className="w-56"
+          placeholder="ex.: caixa hidráulica"
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="extraCostOriginal">Preço extra/un.</Label>
+        <DecimalInput
+          id="extraCostOriginal"
+          name="extraCostOriginal"
+          defaultValue="0"
+          className="w-28"
         />
       </div>
       <Button type="submit" disabled={isPending}>

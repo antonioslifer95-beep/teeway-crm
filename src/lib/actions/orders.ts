@@ -20,6 +20,7 @@ function readOrderForm(formData: FormData) {
     orderDate: formData.get("orderDate"),
     originalCurrency: formData.get("originalCurrency"),
     totalCostOriginal: formData.get("totalCostOriginal"),
+    transportCostOriginal: formData.get("transportCostOriginal"),
     exchangeRateToEUR: formData.get("exchangeRateToEUR"),
     discountType: formData.get("discountType"),
     discountValue: formData.get("discountValue"),
@@ -50,6 +51,7 @@ export async function createOrderAction(
         orderDate: new Date(data.orderDate),
         originalCurrency: data.originalCurrency,
         totalCostOriginal: data.totalCostOriginal,
+        transportCostOriginal: data.transportCostOriginal,
         exchangeRateToEUR: data.exchangeRateToEUR,
         discountType: data.discountType,
         discountValue: data.discountValue,
@@ -87,6 +89,7 @@ export async function updateOrderAction(
         orderDate: new Date(data.orderDate),
         originalCurrency: data.originalCurrency,
         totalCostOriginal: data.totalCostOriginal,
+        transportCostOriginal: data.transportCostOriginal,
         exchangeRateToEUR: data.exchangeRateToEUR,
         discountType: data.discountType,
         discountValue: data.discountValue,
@@ -116,6 +119,8 @@ export async function addOrderItemAction(
     cartModelId: formData.get("cartModelId"),
     quantity: formData.get("quantity"),
     unitGoodsCostOriginal: formData.get("unitGoodsCostOriginal"),
+    extraDescription: formData.get("extraDescription"),
+    extraCostOriginal: formData.get("extraCostOriginal"),
   });
   if (!parsed.success) {
     return parsed.error.issues[0]?.message ?? "Dados inválidos.";
@@ -128,6 +133,8 @@ export async function addOrderItemAction(
         cartModelId: parsed.data.cartModelId,
         quantity: parsed.data.quantity,
         unitGoodsCostOriginal: parsed.data.unitGoodsCostOriginal,
+        extraDescription: parsed.data.extraDescription || null,
+        extraCostOriginal: parsed.data.extraCostOriginal,
       },
     });
   } catch {

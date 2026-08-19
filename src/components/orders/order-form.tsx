@@ -100,15 +100,25 @@ export function OrderForm({
             required
           />
         </div>
-        <div className="col-span-2 flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="totalCostOriginal">
-            Total da encomenda dado pelo fornecedor (informativo)
+            Total da encomenda (informativo)
           </Label>
           <DecimalInput
             id="totalCostOriginal"
             name="totalCostOriginal"
             defaultValue={defaultValues?.totalCostOriginal?.toString() ?? ""}
             required
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="transportCostOriginal">
+            Transporte total do envio (moeda do fornecedor)
+          </Label>
+          <DecimalInput
+            id="transportCostOriginal"
+            name="transportCostOriginal"
+            defaultValue={defaultValues?.transportCostOriginal?.toString() ?? "0"}
           />
         </div>
         <div className="flex flex-col gap-2">
