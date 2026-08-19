@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DecimalInput, IntegerInput } from "@/components/ui/numeric-input";
 import { Input } from "@/components/ui/input";
@@ -42,7 +43,7 @@ export function AddQuoteLineForm({
           variant={mode === "catalog" ? "default" : "outline"}
           onClick={() => setMode("catalog")}
         >
-          Do catálogo
+          De encomenda
         </Button>
         <Button
           type="button"
@@ -77,8 +78,15 @@ function FromOrderForm({
 
   if (orderItems.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Ainda não existem itens em nenhuma encomenda para escolher.
+      <p className="max-w-lg text-sm text-muted-foreground">
+        O preço de uma linha vem do custo de uma encomenda (mercadoria +
+        transporte + direitos). Ainda não há itens de encomenda para escolher —
+        cria primeiro uma{" "}
+        <Link href="/orders/new" className="text-foreground underline">
+          encomenda
+        </Link>{" "}
+        com o modelo pretendido, ou usa &laquo;Linha personalizada&raquo; para um
+        preço manual.
       </p>
     );
   }
