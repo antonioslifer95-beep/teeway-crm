@@ -8,6 +8,7 @@ import { getSettings } from "@/lib/settings";
 import { PIPELINE_STAGE_LABELS } from "@/lib/pipeline";
 import { QUOTE_STATUS_LABELS } from "@/lib/quote-labels";
 import { calculateOrderItemCostBreakdown, calculateSellPrice } from "@/lib/pricing";
+import { formatEUR } from "@/lib/format";
 import {
   Prisma,
   type PipelineStage,
@@ -97,12 +98,20 @@ async function computeOrderItemPricing(
         ...calculateSellPrice({
           landedCostEUR: breakdown.extraLandedEUR,
           customsDutyPercent,
-          clearanceFee: 0, // clearance is per vehicle, charged on the base line
+          clearanceFee: 0, // an accessory doesn't pay its own clearance fee
           markupPercent,
           vatRate,
         }),
       }
     : null;
+
+  // The cart and its accessory stay on ONE line: the unit price is cart + extra,
+  // and the accessory is described inside the line (see buildCartLineSpec).
+  const combined = {
+    landedCostEUR: new D(breakdown.baseLandedEUR).add(breakdown.extraLandedEUR),
+    sellPriceExVat: base.sellPriceExVat.add(extra ? extra.sellPriceExVat : new D(0)),
+    sellPriceIncVat: base.sellPriceIncVat.add(extra ? extra.sellPriceIncVat : new D(0)),
+  };
 
   return {
     orderCartItem,
@@ -112,7 +121,21 @@ async function computeOrderItemPricing(
     vatRate,
     base: { landedCostEUR: breakdown.baseLandedEUR, ...base },
     extra,
+    combined,
   };
+}
+
+/**
+ * Cart line description: the model's default spec, with the accessory (and its
+ * price) appended so the extra is visible inside the single cart line.
+ */
+function buildCartLineSpec(
+  defaultDescription: string | null,
+  extra: { description: string | null; sellPriceExVat: Prisma.Decimal } | null,
+): string | null {
+  if (!extra) return defaultDescription || null;
+  const note = `Inclui ${extra.description || "extra"} (+ ${formatEUR(extra.sellPriceExVat)})`;
+  return defaultDescription ? `${defaultDescription} · ${note}` : note;
 }
 
 function readQuoteForm(formData: FormData) {
@@ -289,58 +312,32 @@ export async function addQuoteLineFromOrderAction(
     where: { quoteId },
     _max: { position: true },
   });
-  let position = (maxPosition._max.position ?? 0) + 1;
 
   try {
-    // Base cart line — commercial name only; the internal factory code is
-    // deliberately hidden from the client-facing orçamento (still linked via
-    // cartModelId for internal reference).
+    // One line per cart. Commercial name only (internal factory code hidden from
+    // the orçamento); the accessory is described inside the line and its price is
+    // folded into the unit price (cart + extra).
     await prisma.quoteLine.create({
       data: {
         quoteId,
-        position,
+        position: (maxPosition._max.position ?? 0) + 1,
         cartModelId: cartModel.id,
         orderId: orderCartItem.orderId,
         orderCartItemId: orderCartItem.id,
         name: cartModel.name,
-        specText: cartModel.defaultDescription,
+        specText: buildCartLineSpec(cartModel.defaultDescription, computed.extra),
         quantity,
-        unitLandedCostEUR: computed.base.landedCostEUR,
+        unitLandedCostEUR: computed.combined.landedCostEUR,
         customsDutyPercentSnapshot: computed.customsDutyPercent,
         clearanceFeeSnapshot: computed.clearanceFee,
         markupPercentSnapshot: computed.markupPercent,
         vatRateSnapshot: computed.vatRate,
-        unitSellPriceExVat: computed.base.sellPriceExVat,
-        unitSellPriceIncVat: computed.base.sellPriceIncVat,
-        lineTotalExVat: computed.base.sellPriceExVat.mul(quantity).toDecimalPlaces(2),
-        lineTotalIncVat: computed.base.sellPriceIncVat.mul(quantity).toDecimalPlaces(2),
+        unitSellPriceExVat: computed.combined.sellPriceExVat,
+        unitSellPriceIncVat: computed.combined.sellPriceIncVat,
+        lineTotalExVat: computed.combined.sellPriceExVat.mul(quantity).toDecimalPlaces(2),
+        lineTotalIncVat: computed.combined.sellPriceIncVat.mul(quantity).toDecimalPlaces(2),
       },
     });
-
-    // Separate accessory line so the base cart keeps its standard price and the
-    // extra is billed transparently. Unlinked from the order item (no recalc
-    // source) so it behaves like a custom line.
-    if (computed.extra) {
-      position += 1;
-      await prisma.quoteLine.create({
-        data: {
-          quoteId,
-          position,
-          orderId: orderCartItem.orderId,
-          name: computed.extra.description || "Extra",
-          quantity,
-          unitLandedCostEUR: computed.extra.landedCostEUR,
-          customsDutyPercentSnapshot: computed.customsDutyPercent,
-          clearanceFeeSnapshot: 0,
-          markupPercentSnapshot: computed.markupPercent,
-          vatRateSnapshot: computed.vatRate,
-          unitSellPriceExVat: computed.extra.sellPriceExVat,
-          unitSellPriceIncVat: computed.extra.sellPriceIncVat,
-          lineTotalExVat: computed.extra.sellPriceExVat.mul(quantity).toDecimalPlaces(2),
-          lineTotalIncVat: computed.extra.sellPriceIncVat.mul(quantity).toDecimalPlaces(2),
-        },
-      });
-    }
   } catch {
     return "Não foi possível adicionar a linha.";
   }
@@ -443,22 +440,25 @@ export async function recalculateQuoteLineAction(
   );
   if (!computed) return { error: "Item de encomenda de origem já não existe." };
 
-  // Only base cart lines keep an orderCartItemId, so recalc always refreshes the
-  // base price (the accessory line is unlinked and treated like a custom line).
-  const lineTotalExVat = computed.base.sellPriceExVat.mul(line.quantity).toDecimalPlaces(2);
-  const lineTotalIncVat = computed.base.sellPriceIncVat.mul(line.quantity).toDecimalPlaces(2);
+  // Refresh the combined cart + accessory price from the source order item.
+  const lineTotalExVat = computed.combined.sellPriceExVat.mul(line.quantity).toDecimalPlaces(2);
+  const lineTotalIncVat = computed.combined.sellPriceIncVat.mul(line.quantity).toDecimalPlaces(2);
 
   try {
     await prisma.quoteLine.update({
       where: { id: lineId },
       data: {
-        unitLandedCostEUR: computed.base.landedCostEUR,
+        specText: buildCartLineSpec(
+          computed.orderCartItem.cartModel.defaultDescription,
+          computed.extra,
+        ),
+        unitLandedCostEUR: computed.combined.landedCostEUR,
         customsDutyPercentSnapshot: computed.customsDutyPercent,
         clearanceFeeSnapshot: computed.clearanceFee,
         markupPercentSnapshot: computed.markupPercent,
         vatRateSnapshot: computed.vatRate,
-        unitSellPriceExVat: computed.base.sellPriceExVat,
-        unitSellPriceIncVat: computed.base.sellPriceIncVat,
+        unitSellPriceExVat: computed.combined.sellPriceExVat,
+        unitSellPriceIncVat: computed.combined.sellPriceIncVat,
         lineTotalExVat,
         lineTotalIncVat,
       },
