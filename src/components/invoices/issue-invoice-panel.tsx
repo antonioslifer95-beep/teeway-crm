@@ -51,8 +51,8 @@ export function IssueInvoicePanel({
           {fiscal.atcud && <Field label="ATCUD" value={fiscal.atcud} />}
         </dl>
         <p className="mt-2 text-xs text-muted-foreground">
-          O ATCUD e o código QR constam no documento fiscal certificado —
-          abra-o no TOConline (abaixo).
+          O código QR consta apenas no documento fiscal certificado — abra-o no
+          TOConline (abaixo).
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {fiscal.pdfUrl && (
@@ -79,6 +79,7 @@ export function IssueInvoicePanel({
                     ? { tone: "error", text: r.error }
                     : { tone: "ok", text: r.ok! },
                 );
+                if (!r.error) router.refresh();
               });
             }}
           >

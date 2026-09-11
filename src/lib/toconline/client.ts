@@ -188,21 +188,12 @@ export async function resolveFiscalExtras(
       method: "GET",
     });
     const s = firstResource(seriesRaw);
-    const direct = pick(s, ["atcud", "at_cud"]);
-    if (direct) {
-      atcud = direct;
-    } else {
-      const code = pick(s, [
-        "at_series_validation_code",
-        "validation_code",
-        "series_validation_code",
-        "at_code",
-        "at_series_code",
-        "code",
-      ]);
-      if (code && String(number)) atcud = `${code}-${number}`;
-    }
-    diag += ` | series[${Object.keys(s).join(",")}]`;
+    // ATCUD = series AT validation code (`atcud_prefix`) + "-" + the document's
+    // number within the series.
+    const direct = pick(s, ["atcud"]);
+    const code = pick(s, ["atcud_prefix", "at_series_validation_code", "validation_code"]);
+    atcud = direct ?? (code && String(number) ? `${code}-${number}` : null);
+    diag += ` | atcud_prefix=${code ?? "?"}`;
   } catch {
     diag += " | series:err";
   }
@@ -212,7 +203,6 @@ export async function resolveFiscalExtras(
       method: "GET",
     });
     pdfUrl = findUrl(printRaw);
-    diag += ` | print=${JSON.stringify(printRaw).slice(0, 160)}`;
   } catch {
     diag += " | print:err";
   }
@@ -350,7 +340,18 @@ export function documentAttributeKeys(raw: unknown): string[] {
 function findUrl(body: unknown): string | null {
   if (typeof body === "string" && /^https?:\/\//.test(body)) return body;
   if (body && typeof body === "object") {
-    for (const v of Object.values(body as Record<string, unknown>)) {
+    const o = body as Record<string, unknown>;
+    // url_for_print returns the url as {scheme, host, port, path} — assemble it.
+    if (
+      typeof o.scheme === "string" &&
+      typeof o.host === "string" &&
+      typeof o.path === "string"
+    ) {
+      const p = o.port;
+      const port = typeof p === "number" && p !== 443 && p !== 80 ? `:${p}` : "";
+      return `${o.scheme}://${o.host}${port}${o.path}`;
+    }
+    for (const v of Object.values(o)) {
       const u = findUrl(v);
       if (u) return u;
     }

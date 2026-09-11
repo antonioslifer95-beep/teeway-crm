@@ -176,8 +176,9 @@ export async function refreshInvoiceFiscalDataAction(
       },
     });
     revalidatePath(`/invoices/${invoiceId}`);
+    const atcud = doc.atcud ?? extras.atcud;
     return {
-      ok: `ATCUD ${doc.atcud ?? extras.atcud ?? "—"} · PDF ${pdfUrl ? "ok" : "—"} · ${extras.diag}`,
+      ok: `Dados fiscais atualizados${atcud ? ` — ATCUD ${atcud}` : ""}.`,
     };
   } catch (err) {
     if (err instanceof TocApiError) {
