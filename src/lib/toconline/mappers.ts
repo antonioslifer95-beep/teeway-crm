@@ -66,8 +66,16 @@ function mapLine(line: InvoiceLineInput): TocSalesLine {
     description,
     quantity: line.quantity,
     unit_price: round2(line.unitSellPriceExVat),
-    tax_percentage: line.vatRate,
+    tax_code: vatRateToTaxCode(line.vatRate),
   };
+}
+
+/** Map a VAT percentage to TOConline's incidence code (mainland PT rates). */
+export function vatRateToTaxCode(rate: number): string {
+  if (rate <= 0) return "ISE"; // isento
+  if (rate <= 6) return "RED"; // reduzida
+  if (rate <= 13) return "INT"; // intermédia
+  return "NOR"; // normal (23%)
 }
 
 export function mapInvoiceToSalesDocument(

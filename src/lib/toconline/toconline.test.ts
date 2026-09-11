@@ -86,7 +86,7 @@ describe("mapInvoiceToSalesDocument", () => {
         description: "Teeway Grand 6 — 6 lugares · azul RAL 5013",
         quantity: 2,
         unit_price: 8130.08,
-        tax_percentage: 23,
+        tax_code: "NOR",
       },
     ]);
   });

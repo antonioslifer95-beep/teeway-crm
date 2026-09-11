@@ -69,9 +69,9 @@ export interface TocSalesLine {
   description: string;
   quantity: number;
   unit_price: number;
-  /** VAT percent, e.g. 23. Omitted when an exemption reason is used. */
-  tax_percentage?: number;
-  tax_exemption_reason_id?: string;
+  /** VAT incidence code: NOR (normal 23%), INT (13%), RED (6%), ISE (exempt).
+   *  TOConline keys VAT off this code, not a raw percentage. */
+  tax_code?: string;
 }
 
 export interface TocSalesDocumentRequest {
