@@ -7,12 +7,7 @@
  * verified ones from the docs + reference library.
  */
 
-import {
-  type TocCustomerRequest,
-  type TocSalesDocumentRequest,
-  type TocSalesLine,
-  type TocDocumentType,
-} from "./types";
+import { type TocCustomerRequest, type TocDocumentType } from "./types";
 
 export interface ClientInput {
   companyName: string;
@@ -54,22 +49,6 @@ export function mapClientToCustomer(client: ClientInput): TocCustomerRequest {
   return req;
 }
 
-function mapLine(line: InvoiceLineInput): TocSalesLine {
-  // Cart/accessory lines are goods; everything is billed as a Product. The
-  // description carries the spec text so the fiscal document reads like the
-  // CRM's own invoice PDF.
-  const description = line.specText?.trim()
-    ? `${line.name.trim()} — ${line.specText.trim()}`
-    : line.name.trim();
-  return {
-    item_type: "Product",
-    description,
-    quantity: line.quantity,
-    unit_price: round2(line.unitSellPriceExVat),
-    tax_code: vatRateToTaxCode(line.vatRate),
-  };
-}
-
 /** Map a VAT percentage to TOConline's incidence code (mainland PT rates). */
 export function vatRateToTaxCode(rate: number): string {
   if (rate <= 0) return "ISE"; // isento
@@ -78,25 +57,48 @@ export function vatRateToTaxCode(rate: number): string {
   return "NOR"; // normal (23%)
 }
 
-export function mapInvoiceToSalesDocument(
-  invoice: InvoiceInput,
-  customer: { businessName: string; nif?: string | null; toconlineId?: string | null },
-): TocSalesDocumentRequest {
-  const doc: TocSalesDocumentRequest = {
+/**
+ * Step 1 payload — the draft document HEADER (no lines). The customer is
+ * referenced by its numeric TOConline id (created beforehand via /api/customers).
+ */
+export function mapInvoiceToDocumentHeader(
+  invoice: Omit<InvoiceInput, "lines">,
+  customer: { toconlineId?: string | null },
+): Record<string, unknown> {
+  const header: Record<string, unknown> = {
     document_type: invoice.documentType ?? "FT",
     date: isoDate(invoice.issueDate ?? new Date()),
-    customer_business_name: customer.businessName.trim(),
-    // Prices are entered ex-VAT in the CRM; let TOConline add VAT per line.
+    // Prices are entered ex-VAT in the CRM; TOConline adds VAT per line.
     vat_included_prices: false,
-    lines: invoice.lines.map(mapLine),
   };
-  if (invoice.dueDate) doc.due_date = isoDate(invoice.dueDate);
-  // Identify the customer by NIF (+ business name), matching TOConline's own
-  // working clients. Passing a bare `customer_id` attribute triggers a 42703
-  // undefined-column error — the customer is already created via /api/customers
-  // and TOConline links it by tax number here.
-  if (customer.nif?.trim()) doc.customer_tax_registration_number = customer.nif.trim();
-  return doc;
+  if (invoice.dueDate) header.due_date = isoDate(invoice.dueDate);
+  const id = customer.toconlineId ? Number(customer.toconlineId) : NaN;
+  if (Number.isFinite(id)) header.customer_id = id;
+  return header;
+}
+
+/**
+ * Step 2 payload — one free-text line attached to a draft document. Billed as a
+ * TaxDescriptor (free description, no catalog item), VAT by incidence code +
+ * percentage + region, matching TOConline's own line records.
+ */
+export function mapInvoiceLineToDocLine(
+  line: InvoiceLineInput,
+  documentId: string | number,
+): Record<string, unknown> {
+  const description = line.specText?.trim()
+    ? `${line.name.trim()} — ${line.specText.trim()}`
+    : line.name.trim();
+  return {
+    document_id: Number(documentId),
+    item_type: "TaxDescriptor",
+    description,
+    quantity: line.quantity,
+    unit_price: round2(line.unitSellPriceExVat),
+    tax_code: vatRateToTaxCode(line.vatRate),
+    tax_percentage: line.vatRate,
+    tax_country_region: "PT",
+  };
 }
 
 /** Round to cents, avoiding binary float drift (e.g. 1.005 -> 1.01). */

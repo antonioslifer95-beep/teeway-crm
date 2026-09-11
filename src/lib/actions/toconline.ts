@@ -13,9 +13,17 @@ import {
 import {
   probeConnection,
   createCustomer,
-  issueSalesDocument,
+  createSalesDocumentHeader,
+  addSalesDocumentLine,
+  finalizeSalesDocument,
+  deleteSalesDocument,
+  getSalesDocumentPdfUrl,
 } from "@/lib/toconline/client";
-import { mapClientToCustomer, mapInvoiceToSalesDocument } from "@/lib/toconline/mappers";
+import {
+  mapClientToCustomer,
+  mapInvoiceToDocumentHeader,
+  mapInvoiceLineToDocLine,
+} from "@/lib/toconline/mappers";
 import { TocApiError, type TocConfig } from "@/lib/toconline/types";
 
 const SETTINGS_PATH = "/settings/integracoes";
@@ -217,13 +225,15 @@ export async function issueInvoiceAction(
   if ("error" in conn) return conn;
   const { config, accessToken } = conn;
 
-  // Kept for diagnostics: on failure we store the exact payload we sent, since
-  // TOConline's line schema isn't published and errors are opaque.
+  // Kept for diagnostics: on failure we store the exact payload we sent.
   let sentDoc: unknown = null;
+  // Track the draft so we can clean it up if a pre-finalize step fails.
+  let draftId: string | null = null;
+  let finalized = false;
 
   try {
-    // 1) Ensure the customer exists on TOConline (non-fiscal). A route/auth
-    //    problem surfaces HERE, before any fiscal document is created.
+    // 1) Ensure the customer exists on TOConline (non-fiscal), so the header
+    //    can reference it by numeric id.
     let customerId = invoice.client.toconlineCustomerId;
     if (!customerId) {
       const created = await createCustomer(
@@ -239,39 +249,56 @@ export async function issueInvoiceAction(
         });
       }
     }
+    if (!customerId) {
+      return { error: "Não foi possível obter o cliente no TOConline." };
+    }
 
-    // 2) Issue the fiscal document (IRREVERSIBLE).
-    const doc = mapInvoiceToSalesDocument(
-      {
-        issueDate: invoice.issueDate,
-        dueDate: invoice.dueDate,
-        lines: invoice.lines.map((l) => ({
-          name: l.name,
-          specText: l.specText,
-          quantity: l.quantity,
-          unitSellPriceExVat: Number(l.unitSellPriceExVat),
-          vatRate: Number(l.vatRate),
-        })),
-      },
-      {
-        businessName: invoice.client.companyName,
-        nif: invoice.client.nif,
-        toconlineId: customerId,
-      },
+    const lineInputs = invoice.lines.map((l) => ({
+      name: l.name,
+      specText: l.specText,
+      quantity: l.quantity,
+      unitSellPriceExVat: Number(l.unitSellPriceExVat),
+      vatRate: Number(l.vatRate),
+    }));
+
+    // 2) Create the DRAFT header (reversible).
+    const header = mapInvoiceToDocumentHeader(
+      { issueDate: invoice.issueDate, dueDate: invoice.dueDate },
+      { toconlineId: customerId },
     );
-    sentDoc = doc;
-    const issued = await issueSalesDocument(config, accessToken, doc);
+    sentDoc = { header, lines: [] as unknown[] };
+    const created = await createSalesDocumentHeader(config, accessToken, header);
+    draftId = created.id;
+    if (!draftId) {
+      return { error: "O TOConline não devolveu um id de documento." };
+    }
+
+    // 3) Add each line to the draft (reversible).
+    for (const line of lineInputs) {
+      const lineAttrs = mapInvoiceLineToDocLine(line, draftId);
+      (sentDoc as { lines: unknown[] }).lines.push(lineAttrs);
+      await addSalesDocumentLine(config, accessToken, lineAttrs);
+    }
+
+    // 4) FINALIZE (irreversible). After this the document is a real FT.
+    const issued = await finalizeSalesDocument(config, accessToken, draftId);
+    finalized = true;
+
+    let pdfUrl = issued.pdfUrl;
+    if (!pdfUrl) {
+      pdfUrl = await getSalesDocumentPdfUrl(config, accessToken, draftId);
+    }
 
     await prisma.invoice.update({
       where: { id: invoiceId },
       data: {
         status: "ISSUED",
-        toconlineDocumentId: issued.documentId,
+        toconlineDocumentId: issued.documentId ?? draftId,
         toconlineDocumentType: "FT",
         toconlineOfficialNumber: issued.officialNumber,
         toconlineAtcud: issued.atcud,
         toconlineQrCodeData: issued.qrCodeData,
-        toconlinePdfUrl: issued.pdfUrl,
+        toconlinePdfUrl: pdfUrl,
         toconlineRawResponse: JSON.stringify(issued.raw),
         issuedAt: new Date(),
         issuedByUserId: session.user.id,
@@ -279,6 +306,11 @@ export async function issueInvoiceAction(
       },
     });
   } catch (err) {
+    // Clean up an unfinalized draft so no orphan documents linger. Never touch
+    // a finalized (fiscal) document.
+    if (draftId && !finalized) {
+      await deleteSalesDocument(config, accessToken, draftId).catch(() => {});
+    }
     const apiMsg =
       err instanceof TocApiError
         ? `Erro da API (${err.status}). ${summarize(err.body)}`

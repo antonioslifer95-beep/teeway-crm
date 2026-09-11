@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildAuthorizationUrl, isExpired } from "./oauth";
 import {
   mapClientToCustomer,
-  mapInvoiceToSalesDocument,
+  mapInvoiceToDocumentHeader,
+  mapInvoiceLineToDocLine,
   round2,
 } from "./mappers";
 import type { TocConfig, TocTokens } from "./types";
@@ -57,47 +58,52 @@ describe("mapClientToCustomer", () => {
   });
 });
 
-describe("mapInvoiceToSalesDocument", () => {
-  it("builds an FT with ex-VAT product lines and folds spec into the description", () => {
-    const doc = mapInvoiceToSalesDocument(
+describe("mapInvoiceToDocumentHeader", () => {
+  it("builds a draft FT header referencing the numeric customer id", () => {
+    const h = mapInvoiceToDocumentHeader(
       {
         issueDate: new Date("2026-09-11T10:00:00Z"),
-        lines: [
-          {
-            name: "Teeway Grand 6",
-            specText: "6 lugares · azul RAL 5013",
-            quantity: 2,
-            unitSellPriceExVat: 8130.081,
-            vatRate: 23,
-          },
-        ],
+        dueDate: new Date("2026-09-25T10:00:00Z"),
       },
-      { businessName: "Eirarest, Lda", nif: "500100200" },
+      { toconlineId: "2" },
     );
-
-    expect(doc.document_type).toBe("FT");
-    expect(doc.date).toBe("2026-09-11");
-    expect(doc.vat_included_prices).toBe(false);
-    expect(doc.customer_tax_registration_number).toBe("500100200");
-    expect(doc.customer_id).toBeUndefined();
-    expect(doc.lines).toEqual([
-      {
-        item_type: "Product",
-        description: "Teeway Grand 6 — 6 lugares · azul RAL 5013",
-        quantity: 2,
-        unit_price: 8130.08,
-        tax_code: "NOR",
-      },
-    ]);
+    expect(h).toEqual({
+      document_type: "FT",
+      date: "2026-09-11",
+      due_date: "2026-09-25",
+      vat_included_prices: false,
+      customer_id: 2,
+    });
   });
 
-  it("identifies the customer by NIF, never a bare customer_id attribute", () => {
-    const doc = mapInvoiceToSalesDocument(
-      { lines: [] },
-      { businessName: "X", nif: "500100200", toconlineId: "cust_42" },
+  it("omits customer_id when no TOConline id is known", () => {
+    const h = mapInvoiceToDocumentHeader({}, { toconlineId: null });
+    expect(h.customer_id).toBeUndefined();
+  });
+});
+
+describe("mapInvoiceLineToDocLine", () => {
+  it("builds a TaxDescriptor line with document_id, rounded price and VAT code", () => {
+    const line = mapInvoiceLineToDocLine(
+      {
+        name: "Teeway Grand 6",
+        specText: "6 lugares · azul RAL 5013",
+        quantity: 2,
+        unitSellPriceExVat: 8130.081,
+        vatRate: 23,
+      },
+      66,
     );
-    expect(doc.customer_id).toBeUndefined();
-    expect(doc.customer_tax_registration_number).toBe("500100200");
+    expect(line).toEqual({
+      document_id: 66,
+      item_type: "TaxDescriptor",
+      description: "Teeway Grand 6 — 6 lugares · azul RAL 5013",
+      quantity: 2,
+      unit_price: 8130.08,
+      tax_code: "NOR",
+      tax_percentage: 23,
+      tax_country_region: "PT",
+    });
   });
 });
 

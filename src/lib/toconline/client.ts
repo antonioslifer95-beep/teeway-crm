@@ -1,17 +1,18 @@
 /**
  * TOConline REST client — JSON:API calls under `/api/<resource>`.
  *
- * Contract confirmed against the OpenAPI spec: write endpoints live at
- * `/api/customers` and `/api/commercial_sales_documents` (NO `/v1/`), and take
- * a JSON:API body `{ data: { type, attributes } }` with Content-Type
- * application/json. Given a valid access token + {@link TocConfig}, this layer
- * performs the two write calls M5 needs.
+ * Sales documents use a THREE-STEP flow (confirmed from TOConline's own Postman
+ * collection), not a single POST:
+ *   1. POST /api/commercial_sales_documents        → create a DRAFT header
+ *   2. POST /api/commercial_sales_document_lines    → add each line (document_id)
+ *   3. PATCH /api/commercial_sales_documents {status:1} → FINALIZE (irreversible)
+ * The draft (steps 1–2) is reversible — DELETE /api/commercial_sales_documents/:id —
+ * so only the finalize is permanent. Bodies are JSON:API `{data:{type,[id,]attributes}}`.
  */
 
 import {
   type TocConfig,
   type TocCustomerRequest,
-  type TocSalesDocumentRequest,
   type TocIssuedDocument,
   TocApiError,
 } from "./types";
@@ -20,16 +21,26 @@ async function apiRequest<T = unknown>(
   config: TocConfig,
   accessToken: string,
   resource: string,
-  init: { method: string; type?: string; attributes?: unknown },
+  init: {
+    method: string;
+    type?: string;
+    id?: string | number;
+    attributes?: unknown;
+    query?: string;
+  },
 ): Promise<T> {
   const body =
     init.attributes === undefined
       ? undefined
       : JSON.stringify({
-          data: { type: init.type, attributes: init.attributes },
+          data: {
+            type: init.type,
+            ...(init.id !== undefined ? { id: String(init.id) } : {}),
+            attributes: init.attributes,
+          },
         });
 
-  const res = await fetch(`${config.baseUrl}/api/${resource}`, {
+  const res = await fetch(`${config.baseUrl}/api/${resource}${init.query ?? ""}`, {
     method: init.method,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -58,11 +69,7 @@ async function apiRequest<T = unknown>(
   return payload as T;
 }
 
-/**
- * Read-only probe used by the "test connection" button: a harmless GET that
- * proves the access token is accepted. Returns the HTTP status and body so the
- * UI can show what came back. Never issues anything.
- */
+/** Read-only probe (harmless GET) for the "test connection" button. */
 export async function probeConnection(
   config: TocConfig,
   accessToken: string,
@@ -96,29 +103,99 @@ export async function createCustomer(
   return { id: extractId(raw), raw };
 }
 
-/**
- * Issue a sales document (FT/FS/FR). This is IRREVERSIBLE on the TOConline side
- * — the document finalizes on submission with no API to edit or cancel it. The
- * caller must have had the user review the invoice first.
- */
-export async function issueSalesDocument(
+// ---- Sales document (multi-step) -------------------------------------------
+
+/** Step 1 — create a draft sales-document header. Returns its numeric id. */
+export async function createSalesDocumentHeader(
   config: TocConfig,
   accessToken: string,
-  doc: TocSalesDocumentRequest,
-): Promise<TocIssuedDocument> {
+  attributes: Record<string, unknown>,
+): Promise<{ id: string | null; raw: unknown }> {
   const raw = await apiRequest(config, accessToken, "commercial_sales_documents", {
     method: "POST",
     type: "commercial_sales_documents",
-    attributes: doc,
+    attributes,
+  });
+  return { id: extractId(raw), raw };
+}
+
+/** Step 2 — add one line to a draft document (attributes carry document_id). */
+export async function addSalesDocumentLine(
+  config: TocConfig,
+  accessToken: string,
+  attributes: Record<string, unknown>,
+): Promise<unknown> {
+  return apiRequest(config, accessToken, "commercial_sales_document_lines", {
+    method: "POST",
+    type: "commercial_sales_document_lines",
+    attributes,
+  });
+}
+
+/**
+ * Step 3 — FINALIZE the document (status → 1). IRREVERSIBLE: assigns the fiscal
+ * number/ATCUD and locks it. Returns the finalized document.
+ */
+export async function finalizeSalesDocument(
+  config: TocConfig,
+  accessToken: string,
+  documentId: string | number,
+): Promise<TocIssuedDocument> {
+  const raw = await apiRequest(config, accessToken, "commercial_sales_documents", {
+    method: "PATCH",
+    type: "commercial_sales_documents",
+    id: documentId,
+    attributes: { status: 1 },
   });
   return extractIssued(raw);
 }
 
-// ---- Defensive extraction ---------------------------------------------------
-// Responses are JSON:API ({ data: { id, attributes } }). The success attributes
-// carry the fiscal data, but the exact field names aren't published, so we
-// probe likely spellings and ALWAYS return the raw body so a first real
-// issuance can confirm the true names — see the M5 spike notes.
+/** Delete a DRAFT document — cleanup when line-adding/finalize fails. Never call
+ *  on a finalized (fiscal) document. Best-effort. */
+export async function deleteSalesDocument(
+  config: TocConfig,
+  accessToken: string,
+  documentId: string | number,
+): Promise<void> {
+  await fetch(`${config.baseUrl}/api/commercial_sales_documents/${documentId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    cache: "no-store",
+  });
+}
+
+/** Fetch the printable PDF URL for a finalized document. Best-effort. */
+export async function getSalesDocumentPdfUrl(
+  config: TocConfig,
+  accessToken: string,
+  documentId: string | number,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${config.baseUrl}/api/url_for_print/${documentId}?filter[type]=Document`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      },
+    );
+    const text = await res.text();
+    let body: unknown;
+    try {
+      body = text ? JSON.parse(text) : text;
+    } catch {
+      body = text;
+    }
+    return findUrl(body);
+  } catch {
+    return null;
+  }
+}
+
+// ---- Response extraction ----------------------------------------------------
 
 function unwrap(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === "object") {
@@ -153,16 +230,27 @@ function extractId(raw: unknown): string | null {
 function extractIssued(raw: unknown): TocIssuedDocument {
   const o = unwrap(raw);
   return {
-    documentId: pick(o, ["id", "document_id"]),
+    documentId: pick(o, ["id"]),
     officialNumber: pick(o, [
-      "document_number",
       "document_no",
+      "company_document_no",
+      "document_number",
       "number",
-      "official_number",
     ]),
     atcud: pick(o, ["atcud", "at_cud"]),
-    qrCodeData: pick(o, ["qr_code_data", "qr_code", "qrcode", "qr"]),
+    qrCodeData: pick(o, ["qr_code_data", "qr_code", "qrcode", "qr", "saft_hash"]),
     pdfUrl: pick(o, ["pdf_url", "public_pdf_url", "download_url", "pdf"]),
     raw,
   };
+}
+
+function findUrl(body: unknown): string | null {
+  if (typeof body === "string" && /^https?:\/\//.test(body)) return body;
+  if (body && typeof body === "object") {
+    for (const v of Object.values(body as Record<string, unknown>)) {
+      const u = findUrl(v);
+      if (u) return u;
+    }
+  }
+  return null;
 }
