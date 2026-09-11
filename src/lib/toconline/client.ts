@@ -162,6 +162,79 @@ export async function getSalesDocument(
   return extractIssued(raw);
 }
 
+/**
+ * Derive the extras the document endpoint doesn't hand back directly: the ATCUD
+ * (series AT validation code + the document's number in the series) and the
+ * certified-PDF url (url_for_print). Returns a `diag` string of the raw field
+ * names/values so the exact keys can be confirmed on first run.
+ */
+export async function resolveFiscalExtras(
+  config: TocConfig,
+  accessToken: string,
+  documentRaw: unknown,
+): Promise<{ atcud: string | null; pdfUrl: string | null; diag: string }> {
+  const o = unwrap(documentRaw);
+  const documentType = String(o.document_type ?? "");
+  const prefix = String(o.document_series_prefix ?? "");
+  const number = o.document_series_no ?? o.document_no ?? "";
+  const id = o.id;
+  let atcud: string | null = null;
+  let pdfUrl: string | null = null;
+  let diag = `type=${documentType} prefix=${prefix} no=${number}`;
+
+  try {
+    const q = `?filter[document_type]=${encodeURIComponent(documentType)}&filter[prefix]=${encodeURIComponent(prefix)}&filter[number]=${encodeURIComponent(String(number))}`;
+    const seriesRaw = await apiRequest(config, accessToken, `commercial_document_series${q}`, {
+      method: "GET",
+    });
+    const s = firstResource(seriesRaw);
+    const direct = pick(s, ["atcud", "at_cud"]);
+    if (direct) {
+      atcud = direct;
+    } else {
+      const code = pick(s, [
+        "at_series_validation_code",
+        "validation_code",
+        "series_validation_code",
+        "at_code",
+        "at_series_code",
+        "code",
+      ]);
+      if (code && String(number)) atcud = `${code}-${number}`;
+    }
+    diag += ` | series[${Object.keys(s).join(",")}]`;
+  } catch {
+    diag += " | series:err";
+  }
+
+  try {
+    const printRaw = await apiRequest(config, accessToken, `url_for_print/${id}?filter[type]=Document`, {
+      method: "GET",
+    });
+    pdfUrl = findUrl(printRaw);
+    diag += ` | print=${JSON.stringify(printRaw).slice(0, 160)}`;
+  } catch {
+    diag += " | print:err";
+  }
+
+  return { atcud, pdfUrl, diag };
+}
+
+function firstResource(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === "object") {
+    const d = (raw as Record<string, unknown>).data;
+    if (Array.isArray(d) && d.length) {
+      const first = d[0] as Record<string, unknown>;
+      const attrs = first.attributes;
+      return attrs && typeof attrs === "object"
+        ? { ...(attrs as Record<string, unknown>), id: first.id }
+        : first;
+    }
+    return unwrap(raw);
+  }
+  return {};
+}
+
 /** Delete a DRAFT document — cleanup when line-adding/finalize fails. Never call
  *  on a finalized (fiscal) document. Best-effort. */
 export async function deleteSalesDocument(

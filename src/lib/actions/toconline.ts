@@ -19,6 +19,7 @@ import {
   deleteSalesDocument,
   getSalesDocumentPdfUrl,
   getSalesDocument,
+  resolveFiscalExtras,
 } from "@/lib/toconline/client";
 import {
   mapClientToCustomer,
@@ -158,19 +159,17 @@ export async function refreshInvoiceFiscalDataAction(
       conn.accessToken,
       invoice.toconlineDocumentId,
     );
-    let pdfUrl = doc.pdfUrl;
-    if (!pdfUrl) {
-      pdfUrl = await getSalesDocumentPdfUrl(
-        conn.config,
-        conn.accessToken,
-        invoice.toconlineDocumentId,
-      );
-    }
+    const extras = await resolveFiscalExtras(conn.config, conn.accessToken, doc.raw);
+    const pdfUrl =
+      doc.pdfUrl ??
+      extras.pdfUrl ??
+      (await getSalesDocumentPdfUrl(conn.config, conn.accessToken, invoice.toconlineDocumentId));
+
     await prisma.invoice.update({
       where: { id: invoiceId },
       data: {
         toconlineOfficialNumber: doc.officialNumber ?? invoice.toconlineOfficialNumber,
-        toconlineAtcud: doc.atcud,
+        toconlineAtcud: doc.atcud ?? extras.atcud,
         toconlineQrCodeData: doc.qrCodeData,
         toconlinePdfUrl: pdfUrl,
         toconlineRawResponse: JSON.stringify(doc.raw),
@@ -178,9 +177,7 @@ export async function refreshInvoiceFiscalDataAction(
     });
     revalidatePath(`/invoices/${invoiceId}`);
     return {
-      ok: pdfUrl
-        ? "Dados fiscais atualizados. Documento certificado disponível."
-        : "Dados fiscais atualizados.",
+      ok: `ATCUD ${doc.atcud ?? extras.atcud ?? "—"} · PDF ${pdfUrl ? "ok" : "—"} · ${extras.diag}`,
     };
   } catch (err) {
     if (err instanceof TocApiError) {
