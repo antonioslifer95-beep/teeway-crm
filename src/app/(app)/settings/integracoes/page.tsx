@@ -15,7 +15,7 @@ const CALLBACK_MESSAGES: Record<string, { ok?: boolean; text: string }> = {
 export default async function IntegrationsSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ connected?: string; error?: string }>;
+  searchParams: Promise<{ connected?: string; error?: string; detail?: string }>;
 }) {
   await requireAdmin();
   const conn = await getConnection();
@@ -24,9 +24,11 @@ export default async function IntegrationsSettingsPage({
   const sp = await searchParams;
   const banner = sp.connected
     ? CALLBACK_MESSAGES[sp.connected]
-    : sp.error
-      ? CALLBACK_MESSAGES[sp.error] ?? { text: "Ocorreu um erro na ligação." }
-      : null;
+    : sp.error === "oauth" && sp.detail
+      ? { text: `O TOConline recusou a autorização: ${sp.detail}.` }
+      : sp.error
+        ? CALLBACK_MESSAGES[sp.error] ?? { text: "Ocorreu um erro na ligação." }
+        : null;
 
   return (
     <div>

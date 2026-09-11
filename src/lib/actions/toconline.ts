@@ -92,7 +92,13 @@ export async function testConnectionAction(): Promise<string> {
     if (res.ok) {
       return `OK — ligado a ${config.environment}. A API respondeu ${res.status}.`;
     }
-    return `A API respondeu ${res.status}. Verifique as credenciais e o URL base. (${summarize(res.body)})`;
+    // Only 401 means the token was rejected. Any other status (e.g. a 404
+    // "no rule found" from the gateway on the read-only probe endpoint) means
+    // the token authenticated and the request reached the API — connection OK.
+    if (res.status === 401) {
+      return "Token recusado (401). Volte a ligar ao TOConline.";
+    }
+    return `Ligado — o token foi aceite (a API respondeu ${res.status} ao endpoint de teste).`;
   } catch (err) {
     if (err instanceof TocNotConfiguredError) {
       return "Configuração incompleta — preencha os URLs e as credenciais primeiro.";

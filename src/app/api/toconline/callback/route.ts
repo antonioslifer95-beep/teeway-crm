@@ -22,9 +22,13 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
+  const oauthError = url.searchParams.get("error");
   const back = (q: string) =>
     NextResponse.redirect(new URL(`${SETTINGS}?${q}`, request.url));
 
+  // TOConline returned an OAuth error instead of a code — surface it verbatim
+  // (e.g. invalid_request) rather than a generic "no code" message.
+  if (oauthError) return back(`error=oauth&detail=${encodeURIComponent(oauthError)}`);
   if (!code || !state) return back("error=missing_code");
 
   const conn = await getConnection();
