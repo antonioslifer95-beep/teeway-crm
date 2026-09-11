@@ -217,6 +217,10 @@ export async function issueInvoiceAction(
   if ("error" in conn) return conn;
   const { config, accessToken } = conn;
 
+  // Kept for diagnostics: on failure we store the exact payload we sent, since
+  // TOConline's line schema isn't published and errors are opaque.
+  let sentDoc: unknown = null;
+
   try {
     // 1) Ensure the customer exists on TOConline (non-fiscal). A route/auth
     //    problem surfaces HERE, before any fiscal document is created.
@@ -255,6 +259,7 @@ export async function issueInvoiceAction(
         toconlineId: customerId,
       },
     );
+    sentDoc = doc;
     const issued = await issueSalesDocument(config, accessToken, doc);
 
     await prisma.invoice.update({
@@ -274,10 +279,13 @@ export async function issueInvoiceAction(
       },
     });
   } catch (err) {
-    const msg =
+    const apiMsg =
       err instanceof TocApiError
         ? `Erro da API (${err.status}). ${summarize(err.body)}`
         : "Falha ao emitir a fatura.";
+    const msg = sentDoc
+      ? `${apiMsg} · payload: ${JSON.stringify(sentDoc)}`
+      : apiMsg;
     await prisma.invoice.update({
       where: { id: invoiceId },
       data: { status: "ERROR", lastSyncError: msg },
