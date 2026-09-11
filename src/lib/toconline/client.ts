@@ -150,6 +150,18 @@ export async function finalizeSalesDocument(
   return extractIssued(raw);
 }
 
+/** Re-fetch a document (e.g. after finalize) to read its fiscal fields. */
+export async function getSalesDocument(
+  config: TocConfig,
+  accessToken: string,
+  documentId: string | number,
+): Promise<TocIssuedDocument> {
+  const raw = await apiRequest(config, accessToken, `commercial_sales_documents/${documentId}`, {
+    method: "GET",
+  });
+  return extractIssued(raw);
+}
+
 /** Delete a DRAFT document — cleanup when line-adding/finalize fails. Never call
  *  on a finalized (fiscal) document. Best-effort. */
 export async function deleteSalesDocument(
@@ -237,11 +249,27 @@ function extractIssued(raw: unknown): TocIssuedDocument {
       "document_number",
       "number",
     ]),
-    atcud: pick(o, ["atcud", "at_cud"]),
-    qrCodeData: pick(o, ["qr_code_data", "qr_code", "qrcode", "qr", "saft_hash"]),
+    atcud: pick(o, ["atcud", "at_cud", "atcud_code", "at_document_code"]),
+    qrCodeData: pick(o, [
+      "qr_code_data",
+      "qr_code",
+      "qrcode",
+      "qr",
+      "qr_code_str",
+      "qr_code_string",
+      "qrcode_data",
+      "saft_hash",
+    ]),
     pdfUrl: pick(o, ["pdf_url", "public_pdf_url", "download_url", "pdf"]),
     raw,
   };
+}
+
+/** All top-level attribute keys of a document response — used to discover the
+ *  real (undocumented) fiscal field names during setup. */
+export function documentAttributeKeys(raw: unknown): string[] {
+  const o = unwrap(raw);
+  return Object.keys(o);
 }
 
 function findUrl(body: unknown): string | null {

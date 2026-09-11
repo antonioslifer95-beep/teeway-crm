@@ -10,6 +10,7 @@ type InvoiceWithRelations = Invoice & {
 };
 
 export function InvoiceDocument({ invoice }: { invoice: InvoiceWithRelations }) {
+  const issued = invoice.status === "ISSUED";
   const clientLines = [
     invoice.client.nif ? `NIF ${invoice.client.nif}` : null,
     [
@@ -31,9 +32,14 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceWithRelations }) 
 
   return (
     <div className={styles.page}>
-      <div className={styles.watermark}>
-        <span>Pré-visualização — não é documento fiscal</span>
-      </div>
+      {/* Preview watermark only while unissued. Once issued it's a real FT — and
+          the semi-transparent overlay also forces the print layer to rasterize
+          (blurry PDF), so it must go. */}
+      {!issued && (
+        <div className={styles.watermark}>
+          <span>Pré-visualização — não é documento fiscal</span>
+        </div>
+      )}
 
       <DocumentHeader title="FATURA" />
 
@@ -144,16 +150,37 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceWithRelations }) 
           </div>
           <div className={styles.previewNotice}>
             <div className={styles.k}>Estado fiscal</div>
-            Documento de pré-visualização gerado internamente — ainda não foi
-            emitido através do sistema certificado TOConline. Não tem
-            número oficial, ATCUD nem código QR.
+            {issued ? (
+              <>
+                Emitida através do sistema certificado TOConline.
+                {invoice.toconlineOfficialNumber &&
+                  ` Documento ${invoice.toconlineOfficialNumber}.`}
+                {invoice.toconlineAtcud && ` ATCUD ${invoice.toconlineAtcud}.`}
+              </>
+            ) : (
+              <>
+                Documento de pré-visualização gerado internamente — ainda não foi
+                emitido através do sistema certificado TOConline. Não tem
+                número oficial, ATCUD nem código QR.
+              </>
+            )}
           </div>
         </div>
 
         <div className={styles.legalnote}>
-          Valores em euros, IVA à taxa legal em vigor. Este documento não
-          constitui fatura para efeitos fiscais até ser emitido através de
-          programa certificado pela Autoridade Tributária.
+          {issued ? (
+            <>
+              Valores em euros, IVA à taxa legal em vigor. Fatura emitida através
+              do programa certificado TOConline; o documento fiscal original, com
+              código QR e ATCUD, está disponível no TOConline.
+            </>
+          ) : (
+            <>
+              Valores em euros, IVA à taxa legal em vigor. Este documento não
+              constitui fatura para efeitos fiscais até ser emitido através de
+              programa certificado pela Autoridade Tributária.
+            </>
+          )}
         </div>
       </div>
 

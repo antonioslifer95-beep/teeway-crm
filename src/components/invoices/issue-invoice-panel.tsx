@@ -7,6 +7,7 @@ import type { InvoiceStatus } from "@/generated/prisma/client";
 import {
   syncInvoiceClientAction,
   issueInvoiceAction,
+  refreshInvoiceFiscalDataAction,
 } from "@/lib/actions/toconline";
 import { formatDatePT } from "@/lib/format";
 
@@ -50,15 +51,49 @@ export function IssueInvoicePanel({
           <Field label="ATCUD" value={fiscal.atcud} />
           <Field label="QR" value={fiscal.qrCodeData} truncate />
         </dl>
-        {fiscal.pdfUrl && (
-          <a
-            href={fiscal.pdfUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-block font-medium text-foreground underline"
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {fiscal.pdfUrl && (
+            <a
+              href={fiscal.pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-foreground underline"
+            >
+              Abrir documento fiscal (PDF) no TOConline
+            </a>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              setMsg(null);
+              startTransition(async () => {
+                const r = await refreshInvoiceFiscalDataAction(invoiceId);
+                setMsg(
+                  r.error
+                    ? { tone: "error", text: r.error }
+                    : { tone: "ok", text: r.ok! },
+                );
+                if (!r.error) router.refresh();
+              });
+            }}
           >
-            Abrir documento fiscal (PDF) no TOConline
-          </a>
+            {pending ? "A atualizar…" : "Atualizar dados fiscais"}
+          </Button>
+        </div>
+        {msg && (
+          <p
+            className={
+              msg.tone === "error"
+                ? "mt-3 text-destructive"
+                : "mt-3 text-muted-foreground"
+            }
+            role={msg.tone === "error" ? "alert" : "status"}
+          >
+            {msg.text}
+          </p>
         )}
       </div>
     );

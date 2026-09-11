@@ -18,6 +18,8 @@ import {
   finalizeSalesDocument,
   deleteSalesDocument,
   getSalesDocumentPdfUrl,
+  getSalesDocument,
+  documentAttributeKeys,
 } from "@/lib/toconline/client";
 import {
   mapClientToCustomer,
@@ -130,6 +132,62 @@ function summarize(body: unknown): string {
   if (!body) return "";
   const s = typeof body === "string" ? body : JSON.stringify(body);
   return s.length > 160 ? `${s.slice(0, 160)}…` : s;
+}
+
+/**
+ * Re-fetch an issued document from TOConline and refresh its stored fiscal
+ * fields (official number, ATCUD, QR, PDF url). Also returns the response's
+ * attribute keys, to pin down the (undocumented) fiscal field names.
+ */
+export async function refreshInvoiceFiscalDataAction(
+  invoiceId: string,
+): Promise<{ ok?: string; error?: string }> {
+  await requireAuth();
+
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!invoice) return { error: "Fatura não encontrada." };
+  if (!invoice.toconlineDocumentId) {
+    return { error: "Esta fatura não tem documento TOConline associado." };
+  }
+
+  const conn = await connectOrMessage();
+  if ("error" in conn) return conn;
+
+  try {
+    const doc = await getSalesDocument(
+      conn.config,
+      conn.accessToken,
+      invoice.toconlineDocumentId,
+    );
+    let pdfUrl = doc.pdfUrl;
+    if (!pdfUrl) {
+      pdfUrl = await getSalesDocumentPdfUrl(
+        conn.config,
+        conn.accessToken,
+        invoice.toconlineDocumentId,
+      );
+    }
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        toconlineOfficialNumber: doc.officialNumber ?? invoice.toconlineOfficialNumber,
+        toconlineAtcud: doc.atcud,
+        toconlineQrCodeData: doc.qrCodeData,
+        toconlinePdfUrl: pdfUrl,
+        toconlineRawResponse: JSON.stringify(doc.raw),
+      },
+    });
+    revalidatePath(`/invoices/${invoiceId}`);
+    const keys = documentAttributeKeys(doc.raw);
+    return {
+      ok: `Atualizado. ATCUD ${doc.atcud ?? "—"}, QR ${doc.qrCodeData ? "ok" : "—"}, PDF ${pdfUrl ? "ok" : "—"}. Campos: ${keys.join(", ")}`,
+    };
+  } catch (err) {
+    if (err instanceof TocApiError) {
+      return { error: `Erro da API (${err.status}). ${summarize(err.body)}` };
+    }
+    return { error: "Falha ao atualizar os dados fiscais." };
+  }
 }
 
 // --- Invoice issuance -------------------------------------------------------
