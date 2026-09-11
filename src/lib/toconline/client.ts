@@ -1,10 +1,11 @@
 /**
- * TOConline REST client — authenticated calls against `/api/v1/*`.
+ * TOConline REST client — JSON:API calls under `/api/<resource>`.
  *
- * Given a valid access token + {@link TocConfig}, performs the two write calls
- * M5 needs: create/find a customer and issue a sales document. Token acquisition
- * and refresh live in oauth.ts; this layer assumes it is handed a live token
- * (the server-action layer refreshes-then-calls).
+ * Contract confirmed against the OpenAPI spec: write endpoints live at
+ * `/api/customers` and `/api/commercial_sales_documents` (NO `/v1/`), and take
+ * a JSON:API body `{ data: { type, attributes } }` with Content-Type
+ * application/json. Given a valid access token + {@link TocConfig}, this layer
+ * performs the two write calls M5 needs.
  */
 
 import {
@@ -18,17 +19,24 @@ import {
 async function apiRequest<T = unknown>(
   config: TocConfig,
   accessToken: string,
-  path: string,
-  init: { method: string; body?: unknown },
+  resource: string,
+  init: { method: string; type?: string; attributes?: unknown },
 ): Promise<T> {
-  const res = await fetch(`${config.baseUrl}/api/v1/${path}`, {
+  const body =
+    init.attributes === undefined
+      ? undefined
+      : JSON.stringify({
+          data: { type: init.type, attributes: init.attributes },
+        });
+
+  const res = await fetch(`${config.baseUrl}/api/${resource}`, {
     method: init.method,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    body,
     cache: "no-store",
   });
 
@@ -42,7 +50,7 @@ async function apiRequest<T = unknown>(
 
   if (!res.ok) {
     throw new TocApiError(
-      `TOConline ${init.method} ${path} failed (${res.status})`,
+      `TOConline ${init.method} /api/${resource} failed (${res.status})`,
       res.status,
       payload,
     );
@@ -53,14 +61,13 @@ async function apiRequest<T = unknown>(
 /**
  * Read-only probe used by the "test connection" button: a harmless GET that
  * proves the access token is accepted. Returns the HTTP status and body so the
- * UI can show what came back (the exact list endpoint is unverified, so this is
- * diagnostic, not a hard pass/fail). Never issues anything.
+ * UI can show what came back. Never issues anything.
  */
 export async function probeConnection(
   config: TocConfig,
   accessToken: string,
 ): Promise<{ ok: boolean; status: number; body: unknown }> {
-  const res = await fetch(`${config.baseUrl}/api/v1/commercial_customers`, {
+  const res = await fetch(`${config.baseUrl}/api/customers`, {
     method: "GET",
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     cache: "no-store",
@@ -75,20 +82,16 @@ export async function probeConnection(
   return { ok: res.ok, status: res.status, body };
 }
 
-/**
- * Create a customer and return its TOConline id. NOTE: the docs say the API
- * auto-creates an empty main address that must then be PATCHed with the real
- * address; we store the id now and defer address enrichment to a follow-up
- * (the invoice only needs business_name + NIF to issue).
- */
+/** Create a customer and return its TOConline id. */
 export async function createCustomer(
   config: TocConfig,
   accessToken: string,
   customer: TocCustomerRequest,
 ): Promise<{ id: string | null; raw: unknown }> {
-  const raw = await apiRequest(config, accessToken, "commercial_customers", {
+  const raw = await apiRequest(config, accessToken, "customers", {
     method: "POST",
-    body: customer,
+    type: "customers",
+    attributes: customer,
   });
   return { id: extractId(raw), raw };
 }
@@ -105,17 +108,17 @@ export async function issueSalesDocument(
 ): Promise<TocIssuedDocument> {
   const raw = await apiRequest(config, accessToken, "commercial_sales_documents", {
     method: "POST",
-    body: doc,
+    type: "commercial_sales_documents",
+    attributes: doc,
   });
   return extractIssued(raw);
 }
 
 // ---- Defensive extraction ---------------------------------------------------
-// The public docs don't publish the success-response schema, so we probe the
-// field names the API is *likely* to use (JSON:API `data.attributes`, or a flat
-// body) across a few spellings, and ALWAYS return the raw body so a first real
-// issuance can confirm the true names — see the M5 spike notes. Adjust the
-// candidate lists once verified rather than trusting them blindly.
+// Responses are JSON:API ({ data: { id, attributes } }). The success attributes
+// carry the fiscal data, but the exact field names aren't published, so we
+// probe likely spellings and ALWAYS return the raw body so a first real
+// issuance can confirm the true names — see the M5 spike notes.
 
 function unwrap(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === "object") {

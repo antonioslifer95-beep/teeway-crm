@@ -91,8 +91,9 @@ export interface TocSalesDocumentRequest {
 export interface TocCustomerRequest {
   business_name: string;
   tax_registration_number?: string;
+  contact_name?: string;
   email?: string;
-  phone?: string;
+  phone_number?: string;
 }
 
 /**

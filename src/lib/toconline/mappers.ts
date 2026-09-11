@@ -48,8 +48,9 @@ function isoDate(d: Date): string {
 export function mapClientToCustomer(client: ClientInput): TocCustomerRequest {
   const req: TocCustomerRequest = { business_name: client.companyName.trim() };
   if (client.nif?.trim()) req.tax_registration_number = client.nif.trim();
+  if (client.contactName?.trim()) req.contact_name = client.contactName.trim();
   if (client.email?.trim()) req.email = client.email.trim();
-  if (client.phone?.trim()) req.phone = client.phone.trim();
+  if (client.phone?.trim()) req.phone_number = client.phone.trim();
   return req;
 }
 
