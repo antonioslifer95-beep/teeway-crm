@@ -91,12 +91,13 @@ describe("mapInvoiceToSalesDocument", () => {
     ]);
   });
 
-  it("prefers a known TOConline customer id when present", () => {
+  it("identifies the customer by NIF, never a bare customer_id attribute", () => {
     const doc = mapInvoiceToSalesDocument(
       { lines: [] },
-      { businessName: "X", toconlineId: "cust_42" },
+      { businessName: "X", nif: "500100200", toconlineId: "cust_42" },
     );
-    expect(doc.customer_id).toBe("cust_42");
+    expect(doc.customer_id).toBeUndefined();
+    expect(doc.customer_tax_registration_number).toBe("500100200");
   });
 });
 

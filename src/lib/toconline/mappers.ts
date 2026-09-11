@@ -91,7 +91,10 @@ export function mapInvoiceToSalesDocument(
     lines: invoice.lines.map(mapLine),
   };
   if (invoice.dueDate) doc.due_date = isoDate(invoice.dueDate);
-  if (customer.toconlineId) doc.customer_id = customer.toconlineId;
+  // Identify the customer by NIF (+ business name), matching TOConline's own
+  // working clients. Passing a bare `customer_id` attribute triggers a 42703
+  // undefined-column error — the customer is already created via /api/customers
+  // and TOConline links it by tax number here.
   if (customer.nif?.trim()) doc.customer_tax_registration_number = customer.nif.trim();
   return doc;
 }
