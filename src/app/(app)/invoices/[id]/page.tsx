@@ -14,6 +14,7 @@ import {
 import { AddInvoiceLineForm } from "@/components/invoices/add-invoice-line-form";
 import { RemoveInvoiceLineButton } from "@/components/invoices/remove-invoice-line-button";
 import { InvoiceStatusSelect } from "@/components/invoices/invoice-status-select";
+import { IssueInvoicePanel } from "@/components/invoices/issue-invoice-panel";
 import { PageHeader, SectionLabel } from "@/components/page-header";
 import { InvoiceStatusBadge } from "@/components/status-badge";
 import { formatDatePT, formatEUR } from "@/lib/format";
@@ -38,6 +39,8 @@ export default async function InvoiceDetailPage({
   ]);
 
   if (!invoice) notFound();
+
+  const issued = invoice.status === "ISSUED";
 
   return (
     <div>
@@ -67,13 +70,15 @@ export default async function InvoiceDetailPage({
           </>
         }
       >
-        <Button
-          variant="outline"
-          nativeButton={false}
-          render={<Link href={`/invoices/${invoice.id}/edit`} />}
-        >
-          Editar
-        </Button>
+        {!issued && (
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href={`/invoices/${invoice.id}/edit`} />}
+          >
+            Editar
+          </Button>
+        )}
         <Button
           nativeButton={false}
           render={<Link href={`/invoices/${invoice.id}/pdf`} target="_blank" />}
@@ -86,7 +91,11 @@ export default async function InvoiceDetailPage({
         <div>
           <SectionLabel>Estado</SectionLabel>
           <div className="mt-2">
-            <InvoiceStatusSelect invoiceId={invoice.id} value={invoice.status} />
+            {issued ? (
+              <InvoiceStatusBadge value={invoice.status} />
+            ) : (
+              <InvoiceStatusSelect invoiceId={invoice.id} value={invoice.status} />
+            )}
           </div>
         </div>
         <div>
@@ -109,20 +118,28 @@ export default async function InvoiceDetailPage({
         </p>
       )}
 
-      <div className="mt-6 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground">
-        Fatura interna, ainda não emitida fiscalmente. A emissão através do
-        TOConline (número oficial, ATCUD, código QR) fica disponível numa
-        fase posterior do projeto — até lá, o PDF é apenas uma
-        pré-visualização.
-      </div>
+      <IssueInvoicePanel
+        invoiceId={invoice.id}
+        status={invoice.status}
+        fiscal={{
+          officialNumber: invoice.toconlineOfficialNumber,
+          atcud: invoice.toconlineAtcud,
+          qrCodeData: invoice.toconlineQrCodeData,
+          pdfUrl: invoice.toconlinePdfUrl,
+          issuedAt: invoice.issuedAt,
+          lastSyncError: invoice.lastSyncError,
+        }}
+      />
 
       <SectionLabel className="mt-12">Linhas da fatura</SectionLabel>
-      <div className="mt-3">
-        <AddInvoiceLineForm
-          invoiceId={invoice.id}
-          defaultVatRate={settings.vatRate.toString()}
-        />
-      </div>
+      {!issued && (
+        <div className="mt-3">
+          <AddInvoiceLineForm
+            invoiceId={invoice.id}
+            defaultVatRate={settings.vatRate.toString()}
+          />
+        </div>
+      )}
 
       <div className="mt-6 overflow-hidden rounded-xl border border-border">
         <Table>
@@ -174,7 +191,12 @@ export default async function InvoiceDetailPage({
                   {formatEUR(line.lineTotalIncVat)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <RemoveInvoiceLineButton lineId={line.id} invoiceId={invoice.id} />
+                  {!issued && (
+                    <RemoveInvoiceLineButton
+                      lineId={line.id}
+                      invoiceId={invoice.id}
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             ))}

@@ -277,6 +277,9 @@ model Invoice {
   toconlineQrCodeData     String?
   toconlinePdfUrl         String?
   lastSyncError           String?
+  // Full JSON of the issuance response — kept so the exact fiscal field names
+  // (which aren't publicly documented) can be verified on the first real issue.
+  toconlineRawResponse    String?
 
   issuedAt       DateTime?
   issuedByUserId String?

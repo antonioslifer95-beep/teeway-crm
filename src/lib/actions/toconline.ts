@@ -3,15 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth-guard";
+import { requireAdmin, requireAuth } from "@/lib/auth-guard";
 import {
   CONNECTION_ID,
   getFreshAccessToken,
   TocNotConfiguredError,
   TocNotConnectedError,
 } from "@/lib/toconline/connection";
-import { probeConnection } from "@/lib/toconline/client";
-import { TocApiError } from "@/lib/toconline/types";
+import {
+  probeConnection,
+  createCustomer,
+  issueSalesDocument,
+} from "@/lib/toconline/client";
+import { mapClientToCustomer, mapInvoiceToSalesDocument } from "@/lib/toconline/mappers";
+import { TocApiError, type TocConfig } from "@/lib/toconline/types";
 
 const SETTINGS_PATH = "/settings/integracoes";
 
@@ -117,4 +122,171 @@ function summarize(body: unknown): string {
   if (!body) return "";
   const s = typeof body === "string" ? body : JSON.stringify(body);
   return s.length > 160 ? `${s.slice(0, 160)}…` : s;
+}
+
+// --- Invoice issuance -------------------------------------------------------
+
+/** Resolve config+token, translating the connection errors into user messages. */
+async function connectOrMessage(): Promise<
+  { config: TocConfig; accessToken: string } | { error: string }
+> {
+  try {
+    return await getFreshAccessToken();
+  } catch (err) {
+    if (err instanceof TocNotConfiguredError)
+      return { error: "TOConline não está configurado (Definições → Integrações)." };
+    if (err instanceof TocNotConnectedError)
+      return { error: "TOConline não está ligado. Ligue em Definições → Integrações." };
+    return { error: "Não foi possível obter um token válido do TOConline." };
+  }
+}
+
+/**
+ * Non-fiscal preflight: ensure the invoice's client exists as a TOConline
+ * customer, storing its id. Safe to run repeatedly — it's a good way to confirm
+ * the write path works before the irreversible issuance.
+ */
+export async function syncInvoiceClientAction(
+  invoiceId: string,
+): Promise<{ ok?: string; error?: string }> {
+  await requireAuth();
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: { client: true },
+  });
+  if (!invoice) return { error: "Fatura não encontrada." };
+  if (invoice.client.toconlineCustomerId) {
+    return { ok: `Cliente já sincronizado (${invoice.client.toconlineCustomerId}).` };
+  }
+
+  const conn = await connectOrMessage();
+  if ("error" in conn) return conn;
+
+  try {
+    const created = await createCustomer(
+      conn.config,
+      conn.accessToken,
+      mapClientToCustomer(invoice.client),
+    );
+    if (created.id) {
+      await prisma.client.update({
+        where: { id: invoice.client.id },
+        data: { toconlineCustomerId: created.id },
+      });
+      revalidatePath(`/invoices/${invoiceId}`);
+      return { ok: `Cliente criado no TOConline (id ${created.id}).` };
+    }
+    return { ok: "Cliente enviado, mas o TOConline não devolveu um id." };
+  } catch (err) {
+    if (err instanceof TocApiError) {
+      return { error: `Erro da API (${err.status}). ${summarize(err.body)}` };
+    }
+    return { error: "Falha ao sincronizar o cliente." };
+  }
+}
+
+/**
+ * Issue the invoice as a fiscal document on TOConline. IRREVERSIBLE — the
+ * document finalizes on submission and cannot be cancelled via the API. Hard
+ * guards: only READY_TO_ISSUE or a prior ERROR (retry) may be issued, never one
+ * that already carries a TOConline document id.
+ */
+export async function issueInvoiceAction(
+  invoiceId: string,
+): Promise<{ ok?: true; error?: string }> {
+  const session = await requireAuth();
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: { client: true, lines: { orderBy: { position: "asc" } } },
+  });
+  if (!invoice) return { error: "Fatura não encontrada." };
+
+  if (invoice.toconlineDocumentId || invoice.status === "ISSUED") {
+    return { error: "Esta fatura já foi emitida no TOConline." };
+  }
+  if (invoice.status !== "READY_TO_ISSUE" && invoice.status !== "ERROR") {
+    return { error: 'A fatura tem de estar em "Pronta a emitir" antes de emitir.' };
+  }
+  if (invoice.lines.length === 0) {
+    return { error: "A fatura não tem linhas." };
+  }
+
+  const conn = await connectOrMessage();
+  if ("error" in conn) return conn;
+  const { config, accessToken } = conn;
+
+  try {
+    // 1) Ensure the customer exists on TOConline (non-fiscal). A route/auth
+    //    problem surfaces HERE, before any fiscal document is created.
+    let customerId = invoice.client.toconlineCustomerId;
+    if (!customerId) {
+      const created = await createCustomer(
+        config,
+        accessToken,
+        mapClientToCustomer(invoice.client),
+      );
+      customerId = created.id;
+      if (customerId) {
+        await prisma.client.update({
+          where: { id: invoice.client.id },
+          data: { toconlineCustomerId: customerId },
+        });
+      }
+    }
+
+    // 2) Issue the fiscal document (IRREVERSIBLE).
+    const doc = mapInvoiceToSalesDocument(
+      {
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        lines: invoice.lines.map((l) => ({
+          name: l.name,
+          specText: l.specText,
+          quantity: l.quantity,
+          unitSellPriceExVat: Number(l.unitSellPriceExVat),
+          vatRate: Number(l.vatRate),
+        })),
+      },
+      {
+        businessName: invoice.client.companyName,
+        nif: invoice.client.nif,
+        toconlineId: customerId,
+      },
+    );
+    const issued = await issueSalesDocument(config, accessToken, doc);
+
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        status: "ISSUED",
+        toconlineDocumentId: issued.documentId,
+        toconlineDocumentType: "FT",
+        toconlineOfficialNumber: issued.officialNumber,
+        toconlineAtcud: issued.atcud,
+        toconlineQrCodeData: issued.qrCodeData,
+        toconlinePdfUrl: issued.pdfUrl,
+        toconlineRawResponse: JSON.stringify(issued.raw),
+        issuedAt: new Date(),
+        issuedByUserId: session.user.id,
+        lastSyncError: null,
+      },
+    });
+  } catch (err) {
+    const msg =
+      err instanceof TocApiError
+        ? `Erro da API (${err.status}). ${summarize(err.body)}`
+        : "Falha ao emitir a fatura.";
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status: "ERROR", lastSyncError: msg },
+    });
+    revalidatePath(`/invoices/${invoiceId}`);
+    return { error: msg };
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  return { ok: true };
 }
