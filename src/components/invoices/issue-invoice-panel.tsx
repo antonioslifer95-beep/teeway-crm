@@ -79,7 +79,6 @@ export function IssueInvoicePanel({
                     ? { tone: "error", text: r.error }
                     : { tone: "ok", text: r.ok! },
                 );
-                if (!r.error) router.refresh();
               });
             }}
           >
