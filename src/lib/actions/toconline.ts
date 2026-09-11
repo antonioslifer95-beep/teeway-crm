@@ -19,7 +19,6 @@ import {
   deleteSalesDocument,
   getSalesDocumentPdfUrl,
   getSalesDocument,
-  documentAttributeKeys,
 } from "@/lib/toconline/client";
 import {
   mapClientToCustomer,
@@ -178,9 +177,10 @@ export async function refreshInvoiceFiscalDataAction(
       },
     });
     revalidatePath(`/invoices/${invoiceId}`);
-    const keys = documentAttributeKeys(doc.raw);
     return {
-      ok: `Atualizado. ATCUD ${doc.atcud ?? "—"}, QR ${doc.qrCodeData ? "ok" : "—"}, PDF ${pdfUrl ? "ok" : "—"}. Campos: ${keys.join(", ")}`,
+      ok: pdfUrl
+        ? "Dados fiscais atualizados. Documento certificado disponível."
+        : "Dados fiscais atualizados.",
     };
   } catch (err) {
     if (err instanceof TocApiError) {
@@ -283,8 +283,6 @@ export async function issueInvoiceAction(
   if ("error" in conn) return conn;
   const { config, accessToken } = conn;
 
-  // Kept for diagnostics: on failure we store the exact payload we sent.
-  let sentDoc: unknown = null;
   // Track the draft so we can clean it up if a pre-finalize step fails.
   let draftId: string | null = null;
   let finalized = false;
@@ -324,7 +322,6 @@ export async function issueInvoiceAction(
       { issueDate: invoice.issueDate, dueDate: invoice.dueDate },
       { toconlineId: customerId },
     );
-    sentDoc = { header, lines: [] as unknown[] };
     const created = await createSalesDocumentHeader(config, accessToken, header);
     draftId = created.id;
     if (!draftId) {
@@ -334,7 +331,6 @@ export async function issueInvoiceAction(
     // 3) Add each line to the draft (reversible).
     for (const line of lineInputs) {
       const lineAttrs = mapInvoiceLineToDocLine(line, draftId);
-      (sentDoc as { lines: unknown[] }).lines.push(lineAttrs);
       await addSalesDocumentLine(config, accessToken, lineAttrs);
     }
 
@@ -369,13 +365,10 @@ export async function issueInvoiceAction(
     if (draftId && !finalized) {
       await deleteSalesDocument(config, accessToken, draftId).catch(() => {});
     }
-    const apiMsg =
+    const msg =
       err instanceof TocApiError
         ? `Erro da API (${err.status}). ${summarize(err.body)}`
         : "Falha ao emitir a fatura.";
-    const msg = sentDoc
-      ? `${apiMsg} · payload: ${JSON.stringify(sentDoc)}`
-      : apiMsg;
     await prisma.invoice.update({
       where: { id: invoiceId },
       data: { status: "ERROR", lastSyncError: msg },

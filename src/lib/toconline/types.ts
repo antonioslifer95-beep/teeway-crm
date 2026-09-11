@@ -106,6 +106,8 @@ export interface TocIssuedDocument {
   officialNumber: string | null;
   atcud: string | null;
   qrCodeData: string | null;
+  /** 4-character document hash control value (shown on fiscal documents). */
+  hashControl: string | null;
   pdfUrl: string | null;
   /** The untouched response body, for auditing + filling gaps in the mapping. */
   raw: unknown;

@@ -249,18 +249,20 @@ function extractIssued(raw: unknown): TocIssuedDocument {
       "document_number",
       "number",
     ]),
-    atcud: pick(o, ["atcud", "at_cud", "atcud_code", "at_document_code"]),
-    qrCodeData: pick(o, [
-      "qr_code_data",
-      "qr_code",
-      "qrcode",
-      "qr",
-      "qr_code_str",
-      "qr_code_string",
-      "qrcode_data",
-      "saft_hash",
+    // TOConline's API does not expose ATCUD or the QR string — they are rendered
+    // only onto its certified PDF. `hash_control` (the 4-char doc hash) is the
+    // one fiscal control value available here.
+    atcud: pick(o, ["atcud", "at_cud"]),
+    qrCodeData: pick(o, ["qr_code_data", "qr_code"]),
+    hashControl: pick(o, ["hash_control"]),
+    // `public_link` is the shareable link to the certified document/PDF.
+    pdfUrl: pick(o, [
+      "public_link",
+      "pdf_url",
+      "public_pdf_url",
+      "download_url",
+      "pdf",
     ]),
-    pdfUrl: pick(o, ["pdf_url", "public_pdf_url", "download_url", "pdf"]),
     raw,
   };
 }
