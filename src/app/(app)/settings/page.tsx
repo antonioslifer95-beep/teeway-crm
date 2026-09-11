@@ -13,6 +13,11 @@ const sections = [
     title: "Preços",
     description: "Margem, IVA, direitos aduaneiros e taxa de desalfandegamento por defeito.",
   },
+  {
+    href: "/settings/integracoes",
+    title: "Integrações",
+    description: "Ligação ao TOConline para emissão de faturas fiscais.",
+  },
 ];
 
 export default async function SettingsPage() {

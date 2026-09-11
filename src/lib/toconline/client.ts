@@ -51,6 +51,31 @@ async function apiRequest<T = unknown>(
 }
 
 /**
+ * Read-only probe used by the "test connection" button: a harmless GET that
+ * proves the access token is accepted. Returns the HTTP status and body so the
+ * UI can show what came back (the exact list endpoint is unverified, so this is
+ * diagnostic, not a hard pass/fail). Never issues anything.
+ */
+export async function probeConnection(
+  config: TocConfig,
+  accessToken: string,
+): Promise<{ ok: boolean; status: number; body: unknown }> {
+  const res = await fetch(`${config.baseUrl}/api/v1/commercial_customers`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    cache: "no-store",
+  });
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = text;
+  }
+  return { ok: res.ok, status: res.status, body };
+}
+
+/**
  * Create a customer and return its TOConline id. NOTE: the docs say the API
  * auto-creates an empty main address that must then be PATCHed with the real
  * address; we store the id now and defer address enrichment to a follow-up

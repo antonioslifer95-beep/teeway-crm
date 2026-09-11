@@ -324,12 +324,27 @@ enum ToconlineEnvironment {
 }
 
 model ToconlineConnection {
-  id           Int                  @id @default(1)
+  id Int @id @default(1)
+
+  // Per-install app registration (configured in-app, Settings → Integrações).
+  // TOConline exposes these hosts per tenant (e.g. api10 / app10.toconline.pt);
+  // none are committed to the repo.
+  apiBaseUrl   String? // API host without /api, e.g. https://api10.toconline.pt
+  oauthBaseUrl String? // OAuth host, e.g. https://app10.toconline.pt/oauth
+  clientId     String?
+  clientSecret String?
+  redirectUri  String?
+
+  // OAuth session (populated by the connect flow).
   accessToken  String?
   refreshToken String?
   expiresAt    DateTime?
   scope        String?
   environment  ToconlineEnvironment @default(SANDBOX)
   obtainedAt   DateTime?
-  updatedAt    DateTime             @updatedAt
+
+  // Anti-CSRF state for the in-flight authorization-code handshake.
+  authState String?
+
+  updatedAt DateTime @updatedAt
 }
