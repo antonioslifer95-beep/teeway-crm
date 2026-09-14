@@ -66,8 +66,19 @@ export function InvoiceDocument({
             <div className={styles.label}>Detalhes</div>
             <div className={styles.details}>
               <dl>
-                <dt>Fatura n.º (interna)</dt>
-                <dd>{invoice.internalRef}</dd>
+                {issued ? (
+                  <>
+                    <dt>Fatura n.º</dt>
+                    <dd>
+                      {invoice.toconlineOfficialNumber ?? invoice.internalRef}
+                    </dd>
+                  </>
+                ) : (
+                  <>
+                    <dt>Documento n.º (interno)</dt>
+                    <dd>{invoice.internalRef}</dd>
+                  </>
+                )}
                 <dt>Data de emissão</dt>
                 <dd>{invoice.issueDate ? formatDatePT(invoice.issueDate) : "—"}</dd>
                 <dt>Data de vencimento</dt>
