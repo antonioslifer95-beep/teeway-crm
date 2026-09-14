@@ -412,8 +412,12 @@
   .page {
     margin: 0;
     box-shadow: none;
-    width: auto;
-    min-height: auto;
+    /* Keep the full A4 height so the flex column pushes the footer to the
+       bottom of the sheet. `min-height: auto` collapsed the page to content
+       height, floating the footer mid-page on short documents. Use 296mm to
+       leave a hair of safety and avoid overflowing onto a blank second page. */
+    width: 210mm;
+    min-height: 296mm;
   }
   @page {
     size: A4;
