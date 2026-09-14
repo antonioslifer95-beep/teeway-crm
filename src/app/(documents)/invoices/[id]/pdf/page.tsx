@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import QRCode from "qrcode";
 import { prisma } from "@/lib/prisma";
 import { InvoiceDocument } from "@/components/documents/invoice-document";
 import { PrintButton } from "@/components/documents/print-button";
@@ -22,6 +23,16 @@ export default async function InvoicePdfPage({
 
   if (!invoice) notFound();
 
+  // Render the AT fiscal QR (built from TOConline's certified values) as an
+  // inline SVG so it prints crisply.
+  const qrSvg = invoice.toconlineQrCodeData
+    ? await QRCode.toString(invoice.toconlineQrCodeData, {
+        type: "svg",
+        margin: 0,
+        errorCorrectionLevel: "M",
+      })
+    : null;
+
   return (
     <div>
       <div className={styles.screenChrome}>
@@ -30,7 +41,7 @@ export default async function InvoicePdfPage({
         </Link>
         <PrintButton />
       </div>
-      <InvoiceDocument invoice={invoice} />
+      <InvoiceDocument invoice={invoice} qrSvg={qrSvg} />
     </div>
   );
 }

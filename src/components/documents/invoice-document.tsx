@@ -9,7 +9,13 @@ type InvoiceWithRelations = Invoice & {
   lines: InvoiceLine[];
 };
 
-export function InvoiceDocument({ invoice }: { invoice: InvoiceWithRelations }) {
+export function InvoiceDocument({
+  invoice,
+  qrSvg,
+}: {
+  invoice: InvoiceWithRelations;
+  qrSvg?: string | null;
+}) {
   const issued = invoice.status === "ISSUED";
   const clientLines = [
     invoice.client.nif ? `NIF ${invoice.client.nif}` : null,
@@ -151,12 +157,26 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceWithRelations }) 
           <div className={styles.previewNotice}>
             <div className={styles.k}>Estado fiscal</div>
             {issued ? (
-              <>
-                Emitida através do sistema certificado TOConline.
-                {invoice.toconlineOfficialNumber &&
-                  ` Documento ${invoice.toconlineOfficialNumber}.`}
-                {invoice.toconlineAtcud && ` ATCUD ${invoice.toconlineAtcud}.`}
-              </>
+              <div className={styles.fiscalRow}>
+                {qrSvg && (
+                  <div
+                    className={styles.qr}
+                    dangerouslySetInnerHTML={{ __html: qrSvg }}
+                  />
+                )}
+                <div>
+                  {invoice.toconlineAtcud && (
+                    <div>ATCUD: {invoice.toconlineAtcud}</div>
+                  )}
+                  {invoice.toconlineOfficialNumber && (
+                    <div>Documento {invoice.toconlineOfficialNumber}.</div>
+                  )}
+                  <div>
+                    Emitida através do programa certificado TOConline (nº
+                    1662/AT).
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 Documento de pré-visualização gerado internamente — ainda não foi

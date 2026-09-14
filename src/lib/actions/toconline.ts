@@ -26,6 +26,7 @@ import {
   mapInvoiceToDocumentHeader,
   mapInvoiceLineToDocLine,
 } from "@/lib/toconline/mappers";
+import { buildFiscalQrFromDocument } from "@/lib/toconline/qr";
 import { TocApiError, type TocConfig } from "@/lib/toconline/types";
 
 const SETTINGS_PATH = "/settings/integracoes";
@@ -134,6 +135,17 @@ function summarize(body: unknown): string {
   return s.length > 160 ? `${s.slice(0, 160)}…` : s;
 }
 
+/** Pull the JSON:API `data.attributes` object out of a document response. */
+function docAttrs(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === "object") {
+    const d = (raw as { data?: { attributes?: unknown } }).data;
+    if (d && typeof d.attributes === "object" && d.attributes) {
+      return d.attributes as Record<string, unknown>;
+    }
+  }
+  return {};
+}
+
 /**
  * Re-fetch an issued document from TOConline and refresh its stored fiscal
  * fields (official number, ATCUD, QR, PDF url). Also returns the response's
@@ -165,20 +177,25 @@ export async function refreshInvoiceFiscalDataAction(
       extras.pdfUrl ??
       (await getSalesDocumentPdfUrl(conn.config, conn.accessToken, invoice.toconlineDocumentId));
 
+    const atcud = doc.atcud ?? extras.atcud;
+    // Build the AT fiscal QR string from TOConline's own document values so it
+    // matches the certified document exactly.
+    const attrs = docAttrs(doc.raw);
+    const qrData = buildFiscalQrFromDocument(attrs, atcud);
+
     await prisma.invoice.update({
       where: { id: invoiceId },
       data: {
         toconlineOfficialNumber: doc.officialNumber ?? invoice.toconlineOfficialNumber,
-        toconlineAtcud: doc.atcud ?? extras.atcud,
-        toconlineQrCodeData: doc.qrCodeData,
+        toconlineAtcud: atcud,
+        toconlineQrCodeData: qrData,
         toconlinePdfUrl: pdfUrl,
         toconlineRawResponse: JSON.stringify(doc.raw),
       },
     });
     revalidatePath(`/invoices/${invoiceId}`);
-    const atcud = doc.atcud ?? extras.atcud;
     return {
-      ok: `Dados fiscais atualizados${atcud ? ` — ATCUD ${atcud}` : ""}.`,
+      ok: `Dados fiscais atualizados${atcud ? ` — ATCUD ${atcud}` : ""}${qrData ? " · QR gerado" : ""}.`,
     };
   } catch (err) {
     if (err instanceof TocApiError) {
@@ -333,25 +350,33 @@ export async function issueInvoiceAction(
     }
 
     // 4) FINALIZE (irreversible). After this the document is a real FT.
-    const issued = await finalizeSalesDocument(config, accessToken, draftId);
+    await finalizeSalesDocument(config, accessToken, draftId);
     finalized = true;
 
-    let pdfUrl = issued.pdfUrl;
-    if (!pdfUrl) {
-      pdfUrl = await getSalesDocumentPdfUrl(config, accessToken, draftId);
-    }
+    // Re-fetch the finalized doc: the finalize response is partial, but the GET
+    // carries the official number, hash, VAT breakdown, etc. — enough to derive
+    // the ATCUD and build the fiscal QR.
+    const doc = await getSalesDocument(config, accessToken, draftId);
+    const extras = await resolveFiscalExtras(config, accessToken, doc.raw);
+    const atcud = doc.atcud ?? extras.atcud;
+    const pdfUrl =
+      doc.pdfUrl ??
+      extras.pdfUrl ??
+      (await getSalesDocumentPdfUrl(config, accessToken, draftId));
+    const attrs = docAttrs(doc.raw);
+    const qrData = buildFiscalQrFromDocument(attrs, atcud);
 
     await prisma.invoice.update({
       where: { id: invoiceId },
       data: {
         status: "ISSUED",
-        toconlineDocumentId: issued.documentId ?? draftId,
+        toconlineDocumentId: doc.documentId ?? draftId,
         toconlineDocumentType: "FT",
-        toconlineOfficialNumber: issued.officialNumber,
-        toconlineAtcud: issued.atcud,
-        toconlineQrCodeData: issued.qrCodeData,
+        toconlineOfficialNumber: doc.officialNumber,
+        toconlineAtcud: atcud,
+        toconlineQrCodeData: qrData,
         toconlinePdfUrl: pdfUrl,
-        toconlineRawResponse: JSON.stringify(issued.raw),
+        toconlineRawResponse: JSON.stringify(doc.raw),
         issuedAt: new Date(),
         issuedByUserId: session.user.id,
         lastSyncError: null,
