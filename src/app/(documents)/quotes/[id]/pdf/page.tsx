@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { QuoteDocument } from "@/components/documents/quote-document";
-import { PrintButton } from "@/components/documents/print-button";
+import { DownloadPdfButton } from "@/components/documents/download-pdf-button";
 import styles from "@/components/documents/document.module.css";
 
 export default async function QuotePdfPage({
@@ -28,7 +28,7 @@ export default async function QuotePdfPage({
         <Link href={`/quotes/${quote.id}`} className="text-sm underline">
           Voltar
         </Link>
-        <PrintButton />
+        <DownloadPdfButton href={`/quotes/${quote.id}/pdf/download`} />
       </div>
       <QuoteDocument quote={quote} />
     </div>

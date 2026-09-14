@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/prisma";
 import { InvoiceDocument } from "@/components/documents/invoice-document";
-import { PrintButton } from "@/components/documents/print-button";
+import { DownloadPdfButton } from "@/components/documents/download-pdf-button";
 import styles from "@/components/documents/document.module.css";
 
 export default async function InvoicePdfPage({
@@ -39,7 +39,7 @@ export default async function InvoicePdfPage({
         <Link href={`/invoices/${invoice.id}`} className="text-sm underline">
           Voltar
         </Link>
-        <PrintButton />
+        <DownloadPdfButton href={`/invoices/${invoice.id}/pdf/download`} />
       </div>
       <InvoiceDocument invoice={invoice} qrSvg={qrSvg} />
     </div>

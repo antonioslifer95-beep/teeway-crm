@@ -7,7 +7,16 @@ const nextConfig: NextConfig = {
   // production build while fetch-based reads keep working. Keeping these
   // packages external loads the real modules at runtime instead of the bundled,
   // broken copy.
-  serverExternalPackages: ["ws", "@neondatabase/serverless", "@prisma/adapter-neon"],
+  // `puppeteer-core` + `@sparticuz/chromium` (server-side invoice PDF) must also
+  // stay external: the chromium binary is a brotli blob the bundler would either
+  // choke on or strip, breaking `executablePath()` at runtime on Vercel.
+  serverExternalPackages: [
+    "ws",
+    "@neondatabase/serverless",
+    "@prisma/adapter-neon",
+    "puppeteer-core",
+    "@sparticuz/chromium",
+  ],
 };
 
 export default nextConfig;
