@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
     "puppeteer-core",
     "@sparticuz/chromium",
   ],
+
+  // @sparticuz/chromium locates its browser binary via a __dirname-relative path
+  // that Next's file tracer can't follow statically, so the compressed blobs
+  // (chromium.br + the AL2023 tarball it extracts on Vercel) get left out of the
+  // function bundle → ENOENT at launch. Force them into just the two PDF routes.
+  outputFileTracingIncludes: {
+    "/invoices/[id]/pdf/download": ["./node_modules/@sparticuz/chromium/bin/**"],
+    "/quotes/[id]/pdf/download": ["./node_modules/@sparticuz/chromium/bin/**"],
+  },
 };
 
 export default nextConfig;

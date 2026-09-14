@@ -87,7 +87,11 @@ export async function GET(
     });
   } catch (err) {
     console.error("[invoice pdf download] generation failed", err);
-    return new NextResponse("Falha ao gerar o PDF. Tente novamente.", {
+    // Internal, auth-gated tool: surface the real error so it can be diagnosed
+    // without Vercel log access.
+    const detail =
+      err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    return new NextResponse(`Falha ao gerar o PDF.\n\n${detail}`, {
       status: 500,
     });
   } finally {
